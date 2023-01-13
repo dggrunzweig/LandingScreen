@@ -79,6 +79,7 @@ function generateWaveformGrid(x_pos, y_pos, x_rate, y_rate, x_phase_rad = 0, y_p
    
     updatePixels();
 }
+
 function createNoise() {
     const noise_depth = 10;    
     for (let y = 0; y < image_height; ++y) {

@@ -1,84 +1,145 @@
-// a shader variable
-let image_width = 800;
+let canvas;
+
+let image_width = 1000;
 let image_height = 800;
 let frame_rate = 60;
 
-let ripple_shader;
-let ripple_buffer;
+let background_color = 240;
 
-let spatial_f = 20;
-let oscillation_f = 0.6;
-let duration = 5;
+const border_width = 15;
+const inset_width = 3;
 
-let position_1 = [0.0, 0.0];
-let position_2 = [1.0, 1.0];
-let position_3 = [0.0, 1.0];
+let canvas_width = image_width + 2 * border_width;
+let canvas_height = image_height + 2 * border_width;
 
-let time_1 = 0;
-let time_2 = duration * 0.42;
-let time_3 = duration * 0.71;
+
+// a shader variable
+let waveform_shader;
+let waveform_buffer;
+
+let frequency_range_x = 0.4;
+let frequency_range_y = 0.2;
+let frequency_x = 1.0 * Math.random();
+let frequency_y = 1.0 * Math.random();
+let phase_x_counter = 2 * Math.PI * Math.random();
+let phase_y_counter = 2 * Math.PI * Math.random();
 
 function preload(){
   // load the shader
-  ripple_shader = loadShader('ripple.vert', 'ripple.frag');
+  waveform_shader = loadShader('waveform.vert', 'waveform.frag');
+}
+
+
+function drawInset() {
+    const x_pos = border_width - inset_width;
+    const y_pos = border_width - inset_width;
+
+    // create dark edge for shadow effect
+    const shadow_color = [background_color-10, background_color-10, background_color-10, 255];
+    // slightly less shadow for the bottom edge
+    const shadow_color_bottom = [background_color-5, background_color-5, background_color-5, 255];
+    
+    loadPixels();
+
+    for (let x = 0; x < image_width + 2 * inset_width; x++) {
+        for (let y = 0; y < inset_width; y++) {
+            set(x_pos + x, y_pos + y, shadow_color); 
+            set(x_pos + x, y_pos + image_height + 2 * inset_width - y - 1, shadow_color_bottom); 
+        }
+    }
+    for (let y = 0; y < image_height + 2 * inset_width; y++) {
+        for (let x = 0; x < inset_width; x++) {
+            set(x_pos + x, y+y_pos, shadow_color); 
+            set(x_pos + image_width + 2*inset_width - x - 1, y+y_pos, shadow_color); 
+        }
+    }
+
+    updatePixels();
+}
+
+
+function getCurrentHour() {
+    const date = new Date();
+    return date.getHours();
 }
 
 function setup() {
   // disables scaling for retina screens which can create inconsistent scaling between displays
   pixelDensity(1);
   
+  getCurrentHour();
+
   // shaders require WEBGL mode to work
-  createCanvas(windowWidth, windowHeight);
+  canvas = createCanvas(canvas_width, canvas_height);
+  var x = (windowWidth - canvas_width) / 2;
+  var y = 0.1 * (windowHeight - canvas_height);
+  canvas.position(x, y);
+
   noStroke();
+  
+  background(background_color);
+  drawInset();
 
   frameRate(frame_rate);
   
-  ripple_buffer = createGraphics(image_width, image_height, WEBGL);
+  waveform_buffer = createGraphics(image_width, image_height, WEBGL);
 }
 
+
+function writeText(time) {
+    // text
+    let fill_color = [200,200,200];
+    fill(fill_color);
+    const text_size = 16;
+    textSize(text_size);
+    const box_width = 200;
+    const box_height = 100;
+    let s = '>> Welcome';
+    fill(fill_color, 155 + Math.abs(100 * Math.sin(16 * time)));
+    text(s, 2 * border_width, 2 * border_width, box_width, box_height); 
+    s = '>> About';
+    fill(fill_color, 155 + Math.abs(100 * Math.sin(17 * time)));
+    text(s, 2 * border_width, 2 * border_width + text_size, box_width, box_height); 
+    s = '>> Works';
+    fill(fill_color, 155 + Math.abs(100 * Math.sin(18 * time)));
+    text(s, 2 * border_width, 2 * border_width + 2 * text_size, box_width, box_height); 
+    s = '>> Contact';
+    fill(fill_color, 155 + Math.abs(100 * Math.sin(19 * time)));
+    text(s, 2 * border_width, 2 * border_width + 3 * text_size, box_width, box_height); 
+    
+}
+
+
 function draw() {
-  // we can draw the background each frame or not.
-  // if we do we can use transparency in our shader.
-  // if we don't it will leave a trailing after image.
-  // background(0);
-  // shader() sets the active shader with our shader
-  time_1 = time_1 + 1/frame_rate;
-  time_2 = time_2 + 1/frame_rate;
-  time_3 = time_3 + 1/frame_rate;
 
-  ripple_shader.setUniform("u_resolution", [image_width, image_height]);
-  ripple_shader.setUniform("u_spatial_frequency", spatial_f);
-  ripple_shader.setUniform("u_oscillation_frequency", oscillation_f);
-  ripple_shader.setUniform("u_duration", duration);
-  ripple_shader.setUniform("u_pos_1", position_1);
-  ripple_shader.setUniform("u_pos_2", position_2);
-  ripple_shader.setUniform("u_pos_3", position_3);
-  ripple_shader.setUniform("u_time_1", time_1);
-  ripple_shader.setUniform("u_time_2", time_2);
-  ripple_shader.setUniform("u_time_3", time_3);
+  waveform_shader.setUniform("u_resolution", [image_width, image_height]);
+  waveform_shader.setUniform("u_rate", [frequency_range_x * sin(frequency_x), frequency_range_y * sin(frequency_y)]);
+  waveform_shader.setUniform("u_phase", [phase_x_counter, phase_y_counter]);
 
-  ripple_buffer.shader(ripple_shader);
+  waveform_buffer.shader(waveform_shader);
 
-  
   // rect gives us some geometry on the screen to draw the shader on
-  ripple_buffer.rect(0,0,image_width,image_height);
-  image(ripple_buffer,0,0,image_width,image_height);
+  waveform_buffer.rect(border_width,border_width,image_width,image_height);
+  image(waveform_buffer,border_width,border_width,image_width,image_height);
 
-  if (time_1 > duration * 2) {
-    position_1 = [Math.random(), Math.random()];
-    time_1 = 0;
-  }
-  if (time_2 > duration * 2) {
-    position_2 = [Math.random(), Math.random()];
-    time_2 = 0;
-  }
-  if (time_3 > duration * 2) {
-    position_3 = [Math.random(), Math.random()];
-    time_3 = 0;
-  }
+  frequency_x = frequency_x + 1 / (8*frame_rate);
+  frequency_y = frequency_y + 1 / (8*frame_rate);
+  phase_x_counter = phase_x_counter + 1 / (frame_rate);
+  phase_y_counter = phase_y_counter + 1 / (frame_rate);
+  
+  if (frequency_x > 2 * Math.PI) frequency_x = 0;
+  if (frequency_y > 2 * Math.PI) frequency_y = 0;
+  if (phase_x_counter > 2 * Math.PI) phase_x_counter = 0;
+  if (phase_y_counter > 2 * Math.PI) phase_y_counter = 0
+  
+  writeText(frequency_x);
+  
 }
 
 
 function windowResized(){
-  resizeCanvas(windowWidth, windowHeight);
+    var x = (windowWidth - canvas_width) / 2;
+    var y = 0.1 * (windowHeight - canvas_height);
+    canvas.position(x, y);
+//   resizeCanvas(canvas_width, canvas_height);
 }
