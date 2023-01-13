@@ -1,7 +1,7 @@
 let canvas;
 let image_width = 800;
 let image_height = 300;
-let frame_rate = 15;
+let frame_rate = 60;
 
 // light mode vs dark mode
 const lightmode = true;
@@ -26,20 +26,21 @@ let phase_y_counter = 2 * Math.PI * Math.random();
 // waveform image
 let ripple_image;
 let perlin_noise_image;
+let grass_image;
 
 // ripple pos
-let ripple_pos_1 = [2 * Math.PI * Math.random(), 2 * Math.PI * Math.random()];
-let ripple_pos_2 = [2 * Math.PI * Math.random(), 2 * Math.PI * Math.random()];
-let ripple_pos_3 = [2 * Math.PI * Math.random(), 2 * Math.PI * Math.random()];
+let ripple_pos_1;
+let ripple_pos_2;
+let ripple_pos_3;
 
+function generateRipplePosition() {
+    return [2 * Math.PI * Math.random(), Math.PI + Math.PI * Math.random()];
+}
 
 function sinc2d(freq, x, y, center_x=0, center_y=0)
 {
     const r = Math.sqrt(Math.pow((x - center_x),2) + Math.pow((y - center_y),2));
-    if (r === 0) {
-        return 1
-    }
-    return (Math.sin(freq * Math.PI * r)) / (freq * Math.PI * r)
+    return Math.exp(-r/1) * Math.sin(freq * Math.PI * r);
 }
 
 function createRipples(freq, x, y, center_x, center_y, time, ripple_rate, duration = 10)
@@ -47,7 +48,7 @@ function createRipples(freq, x, y, center_x, center_y, time, ripple_rate, durati
     return Math.exp(-time / duration) * Math.sin(2 * Math.PI * ripple_rate * time) * sinc2d(freq, x, y, center_x, center_y); 
 }
 
-function generateRippleGrid(img, x_pos, y_pos, time) {
+function generateRippleImage(img, x_pos, y_pos, time) {
     let r_range;
     let g_range;
     let b_range;
@@ -63,13 +64,13 @@ function generateRippleGrid(img, x_pos, y_pos, time) {
     let current_loop_3 = ripple_respawn_time * (ripple_time_3 / ripple_respawn_time  - Math.floor(ripple_time_3 / ripple_respawn_time));
 
     if (current_loop_1 > 0.95 * ripple_respawn_time) {
-        ripple_pos_1 = [2 * Math.PI * Math.random(), 2 * Math.PI * Math.random()];
+        ripple_pos_1 = generateRipplePosition();
     }
     if (current_loop_2 > 0.95 * ripple_respawn_time) {
-        ripple_pos_2 = [2 * Math.PI * Math.random(), 2 * Math.PI * Math.random()];
+        ripple_pos_2 = generateRipplePosition();
     }
     if (current_loop_3 > 0.95 * ripple_respawn_time) {
-        ripple_pos_3 = [2 * Math.PI * Math.random(), 2 * Math.PI * Math.random()];
+        ripple_pos_3 = generateRipplePosition();
     }
 
     if (lightmode) {
@@ -111,61 +112,7 @@ function generateRippleGrid(img, x_pos, y_pos, time) {
     img.updatePixels();
 }
 
-function generateWaveformGrid(img, x_pos, y_pos, x_rate, y_rate, x_phase_rad = 0, y_phase_rad = 0) {
-    let r_range;
-    let g_range;
-    let b_range;
-
-    if (lightmode) {
-        // light mode
-        r_range = [208, 238];
-        g_range = [212, 238];
-        b_range = [230, 245];
-    } else {
-        // dark mode
-        r_range = [20, 25];
-        g_range = [20, 25];
-        b_range = [20, 70];
-    }
-
-    const r_scale = r_range[1] - r_range[0];
-    const g_scale = g_range[1] - g_range[0];
-    const b_scale = b_range[1] - b_range[0];
-
-    // iterate over image to create grid
-    img.loadPixels();
-
-    // weights and frequencies for x and y spectrum
-    x_harm = [0.29, 0.51, 0.69, 1];
-    x_weight = [0.25, 0.25, 0.25, 0.25];
-    y_harm = [0.2, 1, 1.3, 2.9];
-    y_weight = [0.25, 0.25, 0.25, 0.25];
-
-    for (let x = 0; x < image_width; x++) {
-        const x_input = 2 * Math.PI * x / image_width;
-        for (let y = 0; y < image_height; y++) {
-            const y_input = 2 * Math.PI * y / image_height;
-            let wave_output = 0;
-            for (let i = 0; i < x_harm.length; ++i) {
-                wave_output += x_weight[i] * Math.cos(x_harm[i] * x_rate * x_input + x_phase_rad + 0.5*x_input);
-            }
-            for (let j = 0; j < y_harm.length; ++j) {
-                wave_output += y_weight[j] * Math.cos(y_harm[j] * y_rate * y_input + y_phase_rad + 0.5*x_input);
-            }
-            let noise = noise_data[x * image_height + y];
-            if (!lightmode) noise = -noise;
-            const r_pixel = r_range[0] + r_scale * wave_output - noise;
-            const g_pixel = g_range[0] + g_scale * wave_output - noise;
-            const b_pixel = b_range[0] + b_scale * wave_output - noise;
-        
-            img.set(x+x_pos, y+y_pos, [r_pixel, g_pixel, b_pixel, 255]); 
-        }
-    }
-
-    img.updatePixels();
-}
-
-function generatePerlinNoiseGrid(img, x_pos, y_pos, offset_x, offset_y, noise_zoom_x = 0.02, noise_zoom_y = 0.02, seed = 1, transparency = 255) {    
+function generatePerlinNoiseImage(img, x_pos, y_pos, offset_x, offset_y, noise_zoom_x = 0.02, noise_zoom_y = 0.02, seed = 1, transparency = 255) {    
     
     // color settings
     let r_range;
@@ -213,7 +160,7 @@ function generatePerlinNoiseGrid(img, x_pos, y_pos, offset_x, offset_y, noise_zo
 
 function createGrainNoise() {
     const grain_size = 2;
-    const grain_depth = 7;
+    const grain_depth = 5;
     for (let y = 0; y < image_height;) {
         for (let x = 0; x < image_width;) {
             const grain_value = Math.floor(map(Math.random(), 0, 1, 0, grain_depth));
@@ -272,6 +219,40 @@ function drawInset() {
 
 }
 
+function drawGrass(buffer, x_pos, y_pos, height) {
+    const curve_freq = 4 * Math.PI * noise(x_pos);
+
+    for (let y = y_pos; y < y_pos + height; ++y) {
+        const factor = 1 - (y - y_pos) / height;
+        x_new = x_pos + 0.1 * Math.sin(curve_freq * factor);
+        // draw multiple lines
+        const g_pixel = 150 - 50 * y_pos / image_height;
+        const base_alpha = 50 * y_pos / image_height;
+
+        buffer.stroke(0, g_pixel, 0, base_alpha + 100);
+        buffer.line(x_pos, y, x_new, y + 1);
+
+        // 1-factor makes it transparent at the top, creating the effect of a triangle  
+        buffer.stroke(0, g_pixel, 0, base_alpha + 100*(1-factor));
+        buffer.line(x_pos - 1, y, x_new - 1, y + 1);
+
+        buffer.stroke(0, g_pixel, 0, base_alpha + 120*(1-factor));
+        buffer.line(x_pos + 1, y, x_new + 1, y + 1);
+
+        x_pos = x_new;
+    }
+}
+
+function generateGrassImage(buffer, x_pos, y_pos, time) {
+    // buffer.smooth();
+    buffer.strokeJoin(BEVEL);
+    for (let x = x_pos; x < x_pos + image_width; x = x + 3) {
+        let y_offset = map(Math.random(), 0, 1, 0.25 * image_height, 0.8 * image_height);
+        let height = map(y_offset, 0, image_height, 5, 50);
+        drawGrass(buffer, x, y_pos + y_offset, height);
+    }
+}
+
 function setup() {
     canvas = createCanvas(canvas_width, canvas_height);
     var x = (windowWidth - canvas_width) / 2;
@@ -280,15 +261,21 @@ function setup() {
 
     createGrainNoise();
 
-    ripple_image = createImage(image_width, image_height);
-    perlin_noise_image = createImage(image_width, image_height);
-
+    ripple_image = createGraphics(image_width, image_height);
+    perlin_noise_image = createGraphics(image_width, image_height);
+    grass_image = createGraphics(image_width, image_height);
+    
     background(background_color);
     drawInset();
 
+    ripple_pos_1 = generateRipplePosition();
+    ripple_pos_2 = generateRipplePosition();
+    ripple_pos_3 = generateRipplePosition();
+
     // generateWaveformGrid(ripple_image, 0, 0, frequency_range_x * frequency_x, frequency_range_y * frequency_y, phase_x_counter, phase_y_counter);
-    generateRippleGrid(ripple_image, 0, 0, 0);
-    generatePerlinNoiseGrid(perlin_noise_image, 0, 0, frequency_range_x * sin(frequency_x), frequency_range_y * cos(frequency_y),  0.01, 0.01, random(100), 120);
+    generateRippleImage(ripple_image, 0, 0, 0);
+    generatePerlinNoiseImage(perlin_noise_image, 0, 0, frequency_range_x * sin(frequency_x), frequency_range_y * cos(frequency_y),  0.01, 0.01, random(100), 120);
+    generateGrassImage(grass_image, 0, 0);
 
     frameRate(frame_rate);
     // noLoop();
@@ -305,14 +292,11 @@ function windowResized() {
   
 function draw() {
 
-    // generateWaveformGrid(ripple_image, 0, 0, frequency_range_x * sin(frequency_x), frequency_range_y * cos(frequency_y), phase_x_counter, phase_y_counter);
-    // generateWaveformGrid(ripple_image, 0, 0, frequency_range_x * frequency_x, frequency_range_y * frequency_y, phase_x_counter, phase_y_counter);
-    // generatePerlinNoiseGrid(perlin_noise_image, 0, 0, frequency_range_x * sin(frequency_x), frequency_range_y * cos(frequency_y),  0.01, 0.01, random(100));
-
-    generateRippleGrid(ripple_image, 0, 0, millis()/1000);
+    generateRippleImage(ripple_image, 0, 0, millis()/1000);
     image(ripple_image, border_width, border_width);
     image(perlin_noise_image, border_width, border_width);
-
+    // image(grass_image, border_width, border_width);
+    
     frequency_x = frequency_x + 1 / (8*frame_rate);
     frequency_y = frequency_y + 1 / (8*frame_rate);
     phase_x_counter = phase_x_counter + 1 / (frame_rate);
