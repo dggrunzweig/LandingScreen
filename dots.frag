@@ -116,6 +116,25 @@ float ink_specks(vec2 pos, float offset) {
     float specks = smoothstep(0.97, 1.0, perlin2d(132.323 * pos + offset));
     return specks;
 }
+
+float roundedFrame (vec2 pos, vec2 size, float radius, float thickness)
+{
+    size = size / 2.0;
+  vec2 uv = vec2(0.5, 0.5);
+  float d = length(max(abs(uv - pos),size) - size) - radius;
+  return smoothstep(0.55, 0.45, (d / thickness) * 5.0);
+}
+
+vec3 frame(vec2 st, vec3 current_color, float frame_width) {
+    vec3 frame_color = vec3(0.90,0.914,0.918);
+    float frame_scalar = 1.0 - roundedFrame(st, vec2(0.88, 0.88), 0.03, frame_width);
+    if (frame_scalar == 1.0)
+        return frame_color;
+    else
+        return current_color;
+}
+
+
 	
 
 void main() {
@@ -127,18 +146,11 @@ void main() {
     float specks = ink_specks(st, 18.0);
     vec3 dots = circle_grid(st, u_time / 5.0, u_rms);
     float background_color = 15.0/255.0;
-
-    // dots = mask(st, u_time, dots);
     
     vec3 sum = vec3(1.0 - (background_color + specks + grain)) - dots;
     // vec3 sum = vec3((background_color + specks + grain)) + (lilac) * dots;
     // create a frame
-    float frame_width = 0.05;
-    vec3 frame_color = vec3(0.949,0.914,0.918);
-    if (st.x < frame_width || st.x > 1.0 - frame_width)
-        gl_FragColor = vec4(frame_color, 1.0);
-    else if (st.y < frame_width || st.y > 1.0 - frame_width)
-        gl_FragColor = vec4(frame_color, 1.0);
-    else
-        gl_FragColor = vec4(sum, 1.0);
+    float frame_width = 0.03;
+    
+    gl_FragColor = vec4(frame(st, sum, frame_width), 1.0);
 }

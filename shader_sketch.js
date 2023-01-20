@@ -98,12 +98,12 @@ window.setup  = () => {
    chord_module = new ChordModule(audio_ctx, 200, 0, 100, 1);
 
    chord_module.setOutputVolume(-16);
-   chord_module.setFilterLFO(oscillator_rate, 500);
+   chord_module.setFilterLFO(oscillator_rate, 750);
    chord_module.setSynthNoiseGain(-30);
    let amp_mod = audio_ctx.createGain();
    let amp_mod_lfo = new SmoothNoiseLFO(audio_ctx, 0.5);
    amp_mod_lfo.connect(amp_mod.gain);
-   amp_mod_lfo.setRange(db2mag(-20), db2mag(0));
+   amp_mod_lfo.setRange(db2mag(-16), db2mag(0));
     amp_mod_lfo.start();
 
    let output_gain = audio_ctx.createGain();
@@ -166,12 +166,8 @@ last_rms = last_rms + 0.1 * (GetRMS(dataArray) - last_rms);
 let frequency = 100;
 note_index += 0.1;
 
-if (fract(time / 4.0) < 0.01) {
-    // if (note_index >= high_note_index) {
-    //     frequency = 200;
-    //     note_index = 0;
-    //     high_note_index = Math.floor(10 * Math.random());
-    // }
+if (fract(time / 4.0) < 1.0 / frame_rate) {
+
     chord_module.trigger(frequency, audio_ctx.currentTime, 1.0, 0.5 + Math.random(), 1.5);
 }
 
