@@ -11,10 +11,16 @@ let frame_rate = 60;
 
 let oscillator_rate = 0.05;
 
-let background_color = 219;
+let frame_color = [0.992,0.996,0.996];
 
-const border_width = 15;
-const inset_width = 10;
+let speck_offset = 100 * Math.random();
+
+let grid_mode = Math.floor(3 * Math.random());
+let color_mode = Math.floor(2 * Math.random());
+
+console.log(grid_mode, color_mode);
+
+const border_width = 0;
 
 let canvas_width = image_width + 2 * border_width;
 let canvas_height = image_height + 2 * border_width;
@@ -24,7 +30,6 @@ let dot_shader;
 let dot_buffer;
 
 let note_index = 0;
-let high_note_index = 5;
 
 let time = 0;
 
@@ -39,34 +44,6 @@ window.preload = () => {
   // load the shader
   dot_shader = loadShader('dots.vert', 'dots.frag');
 }
-
-
-// function drawInset(canvas) {
-//     const x_pos = border_width - inset_width;
-//     const y_pos = border_width - inset_width;
-
-//     // create dark edge for shadow effect
-//     const shadow_color = [background_color-10, background_color-10, background_color-10, 255];
-//     // slightly less shadow for the bottom edge
-//     const shadow_color_bottom = [background_color-5, background_color-5, background_color-5, 255];
-    
-//     canvas.loadPixels();
-
-//     for (let x = 0; x < image_width + 2 * inset_width; x++) {
-//         for (let y = 0; y < inset_width; y++) {
-//             canvas.set(x_pos + x, y_pos + y, shadow_color); 
-//             canvas.set(x_pos + x, y_pos + image_height + 2 * inset_width - y - 1, shadow_color_bottom); 
-//         }
-//     }
-//     for (let y = 0; y < image_height + 2 * inset_width; y++) {
-//         for (let x = 0; x < inset_width; x++) {
-//             canvas.set(x_pos + x, y+y_pos, shadow_color); 
-//             canvas.set(x_pos + image_width + 2*inset_width - x - 1, y+y_pos, shadow_color); 
-//         }
-//     }
-
-//     canvas.updatePixels();
-// }
 
 window.setup  = () => {
   // disables scaling for retina screens which can create inconsistent scaling between displays
@@ -85,16 +62,13 @@ window.setup  = () => {
   canvas.position(x, y);
 
   noStroke();
-  
-  background(background_color);
-//   drawInset(canvas);
-
+  background(frame_color);
   frameRate(frame_rate);
   
   dot_buffer = createGraphics(image_width, image_height, WEBGL);
-
   dot_buffer.noStroke();
 
+  // audio setup //-------------------
    audio_ctx = new (window.AudioContext || window.webkitAudioContext)();
    chord_module = new ChordModule(audio_ctx, 200, 0, 100, 1);
 
@@ -121,9 +95,7 @@ window.setup  = () => {
    // analyzer
    analyzer = audio_ctx.createAnalyser();
    analyzer.fftSize = 512;
-   output_gain.connect(analyzer);
-
-   
+   output_gain.connect(analyzer);  
 }
 
 
@@ -151,7 +123,6 @@ function writeText(time) {
     s = '>> Contact';
     fill(brightness, brightness, brightness, alpha);
     text(s, 2 * border_width, 2 * border_width + 3 * text_size, box_width, box_height); 
-    
 }
 
 
@@ -161,7 +132,7 @@ window.draw = () =>  {
 const bufferLength = analyzer.frequencyBinCount;
 const dataArray = new Float32Array(bufferLength);
 analyzer.getFloatTimeDomainData(dataArray);
-last_rms = last_rms + 0.1 * (GetRMS(dataArray) - last_rms);
+last_rms = last_rms + 0.05 * (GetRMS(dataArray) - last_rms);
 rms_sum += last_rms;
 
 if (rms_sum > 1000.0 * 2 * Math.Pi)
@@ -176,13 +147,17 @@ if (fract(time / 4.0) < 1.0 / frame_rate) {
     chord_module.trigger(frequency, audio_ctx.currentTime, 1.0, 0.5 + Math.random(), 1.5);
 }
 
-
   // lines
   dot_shader.setUniform("u_resolution", [image_width, image_height]);
   dot_shader.setUniform("u_time", time);
   dot_shader.setUniform("u_rms", last_rms);
   dot_shader.setUniform("u_rms_sum", rms_sum);
   dot_shader.setUniform("u_frequency", frequency);
+  dot_shader.setUniform("u_speck_offset", speck_offset);
+  dot_shader.setUniform("u_grid_mode", grid_mode);
+  dot_shader.setUniform("u_color_mode", color_mode);
+  // let scaled_bg_color = [frame_color[0] / 255.0, frame_color[1] / 255.0, frame_color[2] / 255.0];
+  dot_shader.setUniform("u_frame_color", frame_color);
 
   dot_buffer.shader(dot_shader);
   dot_buffer.rect(border_width,border_width,image_width,image_height);
