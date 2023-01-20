@@ -17,20 +17,15 @@ let canvas_height = image_height + 2 * border_width;
 let waveform_shader;
 let waveform_buffer;
 
-let lines_shader;
-let lines_buffer;
+let paint_shader;
+let paint_buffer;
 
-let frequency_range_x = Math.random() * 4;//  0.4;
-let frequency_range_y = Math.random() * 2;//0.2;
-let frequency_x = 1.0 * Math.random();
-let frequency_y = 1.0 * Math.random();
-let phase_x_counter = 2 * Math.PI * Math.random();
-let phase_y_counter = 2 * Math.PI * Math.random();
+let time = 0;
 
 function preload(){
   // load the shader
   waveform_shader = loadShader('waveform.vert', 'waveform.frag');
-  lines_shader = loadShader('lines.vert', 'lines.frag');
+  paint_shader = loadShader('lines.vert', 'lines.frag');
 }
 
 
@@ -71,6 +66,8 @@ function setup() {
   // disables scaling for retina screens which can create inconsistent scaling between displays
   pixelDensity(1);
   
+  
+
   getCurrentHour();
 
   // shaders require WEBGL mode to work
@@ -87,7 +84,9 @@ function setup() {
   frameRate(frame_rate);
   
   waveform_buffer = createGraphics(image_width, image_height, WEBGL);
-  lines_buffer = createGraphics(image_width, image_height, WEBGL);
+  paint_buffer = createGraphics(image_width, image_height, WEBGL);
+
+  paint_buffer.noStroke();
 }
 
 
@@ -131,27 +130,32 @@ function draw() {
 //   image(waveform_buffer,border_width,border_width,image_width,image_height);
 
   // lines
-  lines_shader.setUniform("u_resolution", [image_width, image_height]);
-  lines_shader.setUniform("u_rate", [frequency_range_x * sin(frequency_x), frequency_range_y * sin(frequency_y)]);
-  lines_shader.setUniform("u_phase", [phase_x_counter, phase_y_counter]);
-  lines_buffer.shader(lines_shader);
+  paint_shader.setUniform("u_resolution", [image_width, image_height]);
+  paint_shader.setUniform("u_time", time);
+  paint_shader.setUniform("u_background_color", [1,1,1]);
 
-  lines_buffer.fill(0,255);
-  lines_buffer.rect(border_width,border_width,image_width,image_height);
-  image(lines_buffer,border_width,border_width,image_width,image_height);
+  paint_buffer.shader(paint_shader);
+  paint_buffer.rect(border_width,border_width,image_width,image_height);
 
+//   gl = waveform_buffer._renderer.GL;
+//   gl.enable(gl.BLEND);
+//   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+//   waveform_buffer.texture(paint_buffer);
+//   waveform_buffer.background(255);
+//   waveform_buffer.noStroke();
+
+//   waveform_buffer.rect(0,-300,100,600);
+//   waveform_buffer.rect(100,-300,100,600);
+
+//   waveform_buffer.rect(-100,0,100,600);
+//   waveform_buffer.rect(100,0,100,600);
+
+  image(paint_buffer,border_width,border_width,image_width,image_height);
   
-  frequency_x = frequency_x + 1 / (4*frame_rate);
-  frequency_y = frequency_y + 1 / (8*frame_rate);
-  phase_x_counter = phase_x_counter + sin(frequency_x) / (frame_rate);
-  phase_y_counter = phase_y_counter + sin(frequency_y) / (frame_rate);
+   time = time + 1 / frame_rate;
   
-  if (frequency_x > 2 * Math.PI) frequency_x = 0;
-  if (frequency_y > 2 * Math.PI) frequency_y = 0;
-  if (phase_x_counter > 2 * Math.PI) phase_x_counter = 0;
-  if (phase_y_counter > 2 * Math.PI) phase_y_counter = 0
-  
-  writeText(frequency_y);
+//   writeText(frequency_y);
   
 }
 
@@ -160,5 +164,4 @@ function windowResized(){
     var x = (windowWidth - canvas_width) / 2;
     var y = (windowHeight - canvas_height) / 2;
     canvas.position(x, y);
-//   resizeCanvas(canvas_width, canvas_height);
 }
