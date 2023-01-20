@@ -1,8 +1,15 @@
+import ChordModule from "./Audio/ChordModule.js";
+import TapeDelay from "./Audio/TapeDelay.js";
+import SmoothNoiseLFO from "./audio/SmoothNoiseLFO.js";
+import { db2mag, GetRMS } from "./Audio/Utilities.js";
+
 let canvas;
 
-let image_width = 1000;
-let image_height = 800;
+let image_height = 400;
+let image_width = 400;
 let frame_rate = 60;
+
+let oscillator_rate = 0.05;
 
 let background_color = 219;
 
@@ -12,65 +19,65 @@ const inset_width = 10;
 let canvas_width = image_width + 2 * border_width;
 let canvas_height = image_height + 2 * border_width;
 
-
 // a shader variable
-let waveform_shader;
-let waveform_buffer;
+let dot_shader;
+let dot_buffer;
 
-let paint_shader;
-let paint_buffer;
+let note_index = 0;
+let high_note_index = 5;
 
 let time = 0;
 
-function preload(){
+// audio
+let chord_module;
+let audio_ctx;
+let analyzer;
+let last_rms = 0.0;
+
+window.preload = () => {
   // load the shader
-  waveform_shader = loadShader('waveform.vert', 'waveform.frag');
-  paint_shader = loadShader('lines.vert', 'lines.frag');
+  dot_shader = loadShader('dots.vert', 'dots.frag');
 }
 
 
-function drawInset() {
-    const x_pos = border_width - inset_width;
-    const y_pos = border_width - inset_width;
+// function drawInset(canvas) {
+//     const x_pos = border_width - inset_width;
+//     const y_pos = border_width - inset_width;
 
-    // create dark edge for shadow effect
-    const shadow_color = [background_color-10, background_color-10, background_color-10, 255];
-    // slightly less shadow for the bottom edge
-    const shadow_color_bottom = [background_color-5, background_color-5, background_color-5, 255];
+//     // create dark edge for shadow effect
+//     const shadow_color = [background_color-10, background_color-10, background_color-10, 255];
+//     // slightly less shadow for the bottom edge
+//     const shadow_color_bottom = [background_color-5, background_color-5, background_color-5, 255];
     
-    loadPixels();
+//     canvas.loadPixels();
 
-    for (let x = 0; x < image_width + 2 * inset_width; x++) {
-        for (let y = 0; y < inset_width; y++) {
-            set(x_pos + x, y_pos + y, shadow_color); 
-            set(x_pos + x, y_pos + image_height + 2 * inset_width - y - 1, shadow_color_bottom); 
-        }
-    }
-    for (let y = 0; y < image_height + 2 * inset_width; y++) {
-        for (let x = 0; x < inset_width; x++) {
-            set(x_pos + x, y+y_pos, shadow_color); 
-            set(x_pos + image_width + 2*inset_width - x - 1, y+y_pos, shadow_color); 
-        }
-    }
+//     for (let x = 0; x < image_width + 2 * inset_width; x++) {
+//         for (let y = 0; y < inset_width; y++) {
+//             canvas.set(x_pos + x, y_pos + y, shadow_color); 
+//             canvas.set(x_pos + x, y_pos + image_height + 2 * inset_width - y - 1, shadow_color_bottom); 
+//         }
+//     }
+//     for (let y = 0; y < image_height + 2 * inset_width; y++) {
+//         for (let x = 0; x < inset_width; x++) {
+//             canvas.set(x_pos + x, y+y_pos, shadow_color); 
+//             canvas.set(x_pos + image_width + 2*inset_width - x - 1, y+y_pos, shadow_color); 
+//         }
+//     }
 
-    updatePixels();
-}
+//     canvas.updatePixels();
+// }
 
-
-function getCurrentHour() {
-    const date = new Date();
-    return date.getHours();
-}
-
-function setup() {
+window.setup  = () => {
   // disables scaling for retina screens which can create inconsistent scaling between displays
   pixelDensity(1);
   
-  
-
-  getCurrentHour();
-
   // shaders require WEBGL mode to work
+  let min_dim = Math.min(windowHeight, windowWidth);
+  console.log(min_dim);
+  image_height = 0.8 * min_dim;
+  image_width = 0.8 * min_dim;
+  canvas_width = image_width + 2 * border_width;
+  canvas_height = image_height + 2 * border_width;
   canvas = createCanvas(canvas_width, canvas_height);
   var x = (windowWidth - canvas_width) / 2;
   var y = (windowHeight - canvas_height) / 2;
@@ -79,14 +86,43 @@ function setup() {
   noStroke();
   
   background(background_color);
-  drawInset();
+//   drawInset(canvas);
 
   frameRate(frame_rate);
   
-  waveform_buffer = createGraphics(image_width, image_height, WEBGL);
-  paint_buffer = createGraphics(image_width, image_height, WEBGL);
+  dot_buffer = createGraphics(image_width, image_height, WEBGL);
 
-  paint_buffer.noStroke();
+  dot_buffer.noStroke();
+
+   audio_ctx = new (window.AudioContext || window.webkitAudioContext)();
+   chord_module = new ChordModule(audio_ctx, 200, 0, 100, 1);
+
+   chord_module.setOutputVolume(-16);
+   chord_module.setFilterLFO(oscillator_rate, 500);
+   chord_module.setSynthNoiseGain(-30);
+   let amp_mod = audio_ctx.createGain();
+   let amp_mod_lfo = new SmoothNoiseLFO(audio_ctx, 0.5);
+   amp_mod_lfo.connect(amp_mod.gain);
+   amp_mod_lfo.setRange(db2mag(-20), db2mag(0));
+    amp_mod_lfo.start();
+
+   let output_gain = audio_ctx.createGain();
+    output_gain.gain.value = 0.0;
+
+   let tape_delay = new TapeDelay(audio_ctx, .50, 0.75, 0.75);
+
+   // hook up
+   chord_module.output.connect(amp_mod).connect(tape_delay.input);
+   tape_delay.output.connect(output_gain).connect(audio_ctx.destination);
+
+   output_gain.gain.linearRampToValueAtTime(1.0, audio_ctx.currentTime + 10.0);
+
+   // analyzer
+   analyzer = audio_ctx.createAnalyser();
+   analyzer.fftSize = 512;
+   output_gain.connect(analyzer);
+
+   
 }
 
 
@@ -118,50 +154,62 @@ function writeText(time) {
 }
 
 
-function draw() {
+window.draw = () =>  {
 
-    // texture background
-//   waveform_shader.setUniform("u_resolution", [image_width, image_height]);
-//   waveform_shader.setUniform("u_rate", [frequency_range_x * sin(frequency_x), frequency_range_y * sin(frequency_y)]);
-//   waveform_shader.setUniform("u_phase", [phase_x_counter, phase_y_counter]);
-//   waveform_buffer.shader(waveform_shader);
+// get data from audio
+const bufferLength = analyzer.frequencyBinCount;
+const dataArray = new Float32Array(bufferLength);
+analyzer.getFloatTimeDomainData(dataArray);
+last_rms = last_rms + 0.1 * (GetRMS(dataArray) - last_rms);
 
-//   waveform_buffer.rect(border_width,border_width,image_width,image_height);
-//   image(waveform_buffer,border_width,border_width,image_width,image_height);
+// trigger new synth line
+let frequency = 100;
+note_index += 0.1;
+
+if (fract(time / 4.0) < 0.01) {
+    // if (note_index >= high_note_index) {
+    //     frequency = 200;
+    //     note_index = 0;
+    //     high_note_index = Math.floor(10 * Math.random());
+    // }
+    chord_module.trigger(frequency, audio_ctx.currentTime, 1.0, 0.5 + Math.random(), 1.5);
+}
+
 
   // lines
-  paint_shader.setUniform("u_resolution", [image_width, image_height]);
-  paint_shader.setUniform("u_time", time);
-  paint_shader.setUniform("u_background_color", [1,1,1]);
+  dot_shader.setUniform("u_resolution", [image_width, image_height]);
+  dot_shader.setUniform("u_time", time);
+  dot_shader.setUniform("u_rms", last_rms);
+  dot_shader.setUniform("u_frequency", frequency);
 
-  paint_buffer.shader(paint_shader);
-  paint_buffer.rect(border_width,border_width,image_width,image_height);
+  dot_buffer.shader(dot_shader);
+  dot_buffer.rect(border_width,border_width,image_width,image_height);
 
-//   gl = waveform_buffer._renderer.GL;
-//   gl.enable(gl.BLEND);
-//   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-//   waveform_buffer.texture(paint_buffer);
-//   waveform_buffer.background(255);
-//   waveform_buffer.noStroke();
-
-//   waveform_buffer.rect(0,-300,100,600);
-//   waveform_buffer.rect(100,-300,100,600);
-
-//   waveform_buffer.rect(-100,0,100,600);
-//   waveform_buffer.rect(100,0,100,600);
-
-  image(paint_buffer,border_width,border_width,image_width,image_height);
+  image(dot_buffer,border_width,border_width,image_width,image_height);
   
-   time = time + 1 / frame_rate;
+  time = time + 1 / frame_rate;
+
+
+
+
   
-//   writeText(frequency_y);
+//   writeText(0.0);
   
 }
 
 
-function windowResized(){
+window.windowResized = () => {
+    let min_dim = Math.min(windowHeight, windowWidth);
+    image_height = 0.8 * min_dim;
+    image_width = 0.8 * min_dim;
+    canvas_width = image_width + 2 * border_width;
+    canvas_height = image_height + 2 * border_width;
     var x = (windowWidth - canvas_width) / 2;
     var y = (windowHeight - canvas_height) / 2;
+    canvas = createCanvas(canvas_width, canvas_height);
     canvas.position(x, y);
+    // drawInset();
+    
+    dot_buffer = createGraphics(image_width, image_height, WEBGL);  
+    dot_buffer.noStroke();
 }
