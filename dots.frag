@@ -9,6 +9,7 @@ precision mediump float;
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_rms;
+uniform float u_rms_sum;
 uniform float u_frequency;
 
 mat2 rotate2d(float angle){
@@ -74,51 +75,61 @@ float paint_dot(in vec2 st, in vec2 center, in float radius, float time, float w
 	return pressure_variance * (1. - (outer_circle + inner_circle));
 }
 
-vec3 circle_grid(vec2 pos, float time, float modulator) {
+vec3 circle_grid(vec2 pos, float time, float mod_1, float mod_2, int mode) {
     vec3 dark_lilac = vec3(0.686,0.624,0.788);
     vec3 light_lilac = vec3(0.929,0.89,1.);
     vec3 dots = vec3(0.0);   
     float i = 0.0, j = 0.0;
     // grid
-    // const vec2 size = vec2(10.0,10.0);
-    // vec2 scaled_pos = pos * size;
-    // for (float x = 0.0; x < size.x; x++) {
-    //     for (float y = 0.0; y < size.y; y++) {
-    //         float radius = modulator + 0.1 * abs(sin(2.0 * time));
-    //         float randomized_scalar = perlin1d(121.2414 * (x + y) + time / 10.0);
-    //         vec3 color = 1.0 - mix(light_lilac, dark_lilac, randomized_scalar);
-    //         vec3 new_dots = color * paint_dot(scaled_pos - 0.5, vec2(x,y), radius, time, 0.6);
-    //         dots = dots + new_dots;
-    //     }
-    // }
-    // randomized floating
-    // const vec2 size = vec2(10.0,10.0);
-    // vec2 scaled_pos = pos * size;
-    // for (float i = 0.0; i < size.x * size.y; ++i) {
-    //     // generate a new random position for every circle
-    //     vec2 circle_pos = vec2(size.x * perlin1d(i + time / 10.0), size.y * perlin1d(i + 12123.1 + time / 10.0));
-    //     float radius = modulator + 0.1 * abs(sin(2.0 * time));//0.1 + 0.5 * perlin2d(5. * vec2(i,j) + time);
-    //     float randomized_scalar = perlin1d(14.2414 * i);
-    //     vec3 color = 1.0 - mix(light_lilac, dark_lilac, step(0.5, randomized_scalar));
-    //     vec3 new_dots = color * paint_dot(scaled_pos - 0.5, circle_pos, radius, time, 0.6);
-    //     dots = dots + new_dots;
-    // }
-    // Spiral grid
-    const vec2 size = vec2(10.0,10.0);
-    vec2 scaled_pos = pos * size;
-    const float total_count = size.x * size.y;
-    const float cos_radius = size.x / 1.8;
-    const float sin_radius = size.y / 2.34;
-    for (float i = 0.0; i < total_count; ++i) {
-        // generate a new random position for every circle
-        float interval = 2.0 * PI / 3.1 * i;
-        float decay = exp(-1.9 * i / total_count);
-        vec2 circle_pos = vec2(size.x/2.0 + cos_radius * decay * cos(interval + time / 10.0), size.y/2.0 + decay * sin_radius * sin(interval + time / 10.0));
-        float radius = 0.1 + 0.5 * modulator + 0.05 * abs(sin(2.0 * time));//0.1 + 0.5 * perlin2d(5. * vec2(i,j) + time);
-        float randomized_scalar = perlin1d(14.2414 * i);
-        vec3 color = 1.0 - mix(light_lilac, dark_lilac, step(0.5, randomized_scalar));
-        vec3 new_dots = color * paint_dot(scaled_pos, circle_pos, radius, time, 0.6);
-        dots = dots + new_dots;
+    if (mode == 0) {
+        const vec2 size = vec2(10.0,10.0);
+        vec2 scaled_pos = pos * size;
+        for (float x = 0.0; x < size.x; x++) {
+            for (float y = 0.0; y < size.y; y++) {
+                float radius = mod_1 + 0.1 * abs(sin(2.0 * time));
+                float randomized_scalar = perlin1d(121.2414 * (x + y) + time / 10.0);
+                vec3 color = 1.0 - mix(light_lilac, dark_lilac, randomized_scalar);
+                // vec2 center_point = vec2(x + 0.4 * perlin1d(6.0212 * x) * cos(perlin1d(3.12 * x) * 5.0 * time), y + perlin1d(3.12 * y) * sin(perlin1d(3.12 * y) * 5.0 * time));
+                vec2 noise_position = vec2(x,y);
+                vec2 center_point = vec2(x + 0.1 * cos(2.0 * PI * time) * rand2d(noise_position), y + 0.1 * sin(2.0 * PI * time) *  rand2d(noise_position) + 0.2 * sin(y + mod_2));
+                vec3 new_dots = color * paint_dot(scaled_pos - 0.5, center_point, radius, time, 0.6);
+                dots = dots + new_dots;
+            }
+        }
+    } else if (mode == 1) {
+        // randomized floating
+        const vec2 size = vec2(10.0,10.0);
+        vec2 scaled_pos = pos * size;
+        for (float i = 0.0; i < size.x * size.y; ++i) {
+            // generate a new random position for every circle
+            vec2 circle_pos = vec2(size.x * perlin1d(i + time / 10.0), size.y * perlin1d(i + 12123.1 + time / 10.0));
+            float radius = mod_1 + 0.1 * abs(sin(2.0 * time));//0.1 + 0.5 * perlin2d(5. * vec2(i,j) + time);
+            float randomized_scalar = perlin1d(14.2414 * i);
+            vec3 color = 1.0 - mix(light_lilac, dark_lilac, step(0.5, randomized_scalar));
+            vec3 new_dots = color * paint_dot(scaled_pos - 0.5, circle_pos, radius, time, 0.6);
+            dots = dots + new_dots;
+        }
+    } else if (mode == 2) {
+        // Spiral grid
+        const vec2 size = vec2(10.0,10.0);
+        vec2 scaled_pos = pos * size;
+        const float total_count = size.x * size.y;
+        float cos_radius = size.x / 1.8;
+        float sin_radius = size.y / 2.34;
+        for (float i = 0.0; i < total_count; ++i) {
+            float interval = 2.0 * PI / 3.1 * i;
+            float decay = exp(-1.9 * i / total_count);
+            // add some noise to the radius
+            cos_radius = cos_radius + 0.2 * (2.0 * rand2d(vec2(i,i)) - 1.0);
+            sin_radius = sin_radius + 0.2 * (2.0 * rand2d(vec2(i,i)) - 1.0);
+            
+            vec2 circle_pos = vec2(size.x/2.0 + cos_radius * decay * cos(interval + mod_2 / 10.0), size.y/2.0 + decay * sin_radius * sin(interval + mod_2 / 10.0));
+            float radius = 0.1 + 0.5 * mod_1 + 0.05 * abs(sin(2.0 * time));//0.1 + 0.5 * perlin2d(5. * vec2(i,j) + time);
+            float randomized_scalar = perlin1d(14.2414 * i);
+            vec3 color = 1.0 - mix(light_lilac, dark_lilac, step(0.5, randomized_scalar));
+            vec3 new_dots = color * paint_dot(scaled_pos, circle_pos, radius, time, 0.6);
+            dots = dots + new_dots;
+        }
     }
     return dots;
 }
@@ -159,9 +170,9 @@ void main() {
   // st.x now hold x-pos, st.y now holds y-pos.
   vec2 st = gl_FragCoord.xy / u_resolution.xy; 
 
-    float grain = 0.08 * rand2d(st); 
-    float specks = ink_specks(st, 18.0);
-    vec3 dots = circle_grid(st, u_time / 5.0, u_rms);
+    float grain = 0.03 * rand2d(st); 
+    float specks = ink_specks(st, sin(u_time));//18.0);
+    vec3 dots = circle_grid(st, u_time / 5.0, u_rms, u_rms_sum, 2);
     float background_color = 25.0/255.0;
     
     vec3 sum = vec3(1.0 - (background_color + specks + grain)) - dots;

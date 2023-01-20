@@ -33,6 +33,7 @@ let chord_module;
 let audio_ctx;
 let analyzer;
 let last_rms = 0.0;
+let rms_sum = 0.0;
 
 window.preload = () => {
   // load the shader
@@ -161,6 +162,10 @@ const bufferLength = analyzer.frequencyBinCount;
 const dataArray = new Float32Array(bufferLength);
 analyzer.getFloatTimeDomainData(dataArray);
 last_rms = last_rms + 0.1 * (GetRMS(dataArray) - last_rms);
+rms_sum += last_rms;
+
+if (rms_sum > 1000.0 * 2 * Math.Pi)
+  rms_sum = 0.0;
 
 // trigger new synth line
 let frequency = 100;
@@ -176,6 +181,7 @@ if (fract(time / 4.0) < 1.0 / frame_rate) {
   dot_shader.setUniform("u_resolution", [image_width, image_height]);
   dot_shader.setUniform("u_time", time);
   dot_shader.setUniform("u_rms", last_rms);
+  dot_shader.setUniform("u_rms_sum", rms_sum);
   dot_shader.setUniform("u_frequency", frequency);
 
   dot_buffer.shader(dot_shader);
