@@ -10,7 +10,14 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec3 u_frame_color;
 uniform float u_speck_offset;
-uniform float u_rotation;
+uniform float u_warp_depth;
+uniform float u_warp_rate;
+uniform float u_small_variance_rate;
+uniform float u_scratch_thresh;
+uniform float u_scratch_len;
+uniform float u_ring_thickness;
+uniform float u_num_rings;
+uniform vec4 u_paint_gradient_settings;
 
 float rad2deg(float rad) { return rad / PI * 180.0; }
 
@@ -64,14 +71,14 @@ float perlin2d(vec2 pos) {
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-float ink_specks(vec2 pos, float offset, float threshold) {
-  float specks = smoothstep(threshold, 1.0,
-                            perlin2d(vec2(153.323, 312.89) * pos + offset));
+float ink_specks(vec2 pos, float offset, float zoom, float threshold) {
+  float specks = smoothstep(
+      threshold, 1.0, perlin2d(zoom * vec2(153.323, 312.89) * pos + offset));
   return specks;
 }
 
 float tree_splits(vec2 st, vec2 center, float radius, float slice_position,
-                  float seed) {
+                  float depth) {
   vec2 dist = (st - center);
   // angle between center point and input point
   float angle = rad2deg(atan(dist.y, dist.x)) + 180.0;
@@ -79,14 +86,14 @@ float tree_splits(vec2 st, vec2 center, float radius, float slice_position,
   dist = abs(dist);
   float dist_mag = sqrt(dot(dist, dist));
 
-  // slice position
+  // slice position with variance as you move across radial distance
   slice_position = slice_position + perlin1d(100.0 * dist_mag);
   // width of slice in degree
   float slice_width_deg = (3.0 + perlin1d(100.0 * dist_mag));
   // softness of slice edge
   float slice_softness = 0.1;
   float radial_length = radius / 1.0;
-  float start_pos = 0.2 + radius * perlin1d(seed);
+  float start_pos = radius * (1.0 - depth);
   float end_pos = radius;
   // this taper ensures that the lines get thinner as they approach the center
   float taper = (dist_mag - start_pos) / (radius - start_pos);
@@ -100,7 +107,9 @@ float tree_splits(vec2 st, vec2 center, float radius, float slice_position,
 }
 
 float tree_ring(in vec2 st, in vec2 center, in float radius, in float thickness,
-                in float seed, in float variance_factor) {
+                in float seed, in float warp_depth, in float warp_rate,
+                in float small_variance_rate, in float scratch_thresh,
+                float scratch_len, vec4 paint_gradient_settings) {
   vec2 dist = (st - center);
   // angle between center point and input point
   float angle = rad2deg(atan(dist.y, dist.x)) + 180.0;
@@ -109,21 +118,31 @@ float tree_ring(in vec2 st, in vec2 center, in float radius, in float thickness,
   float dist_mag = sqrt(dot(dist, dist));
   // large modulations in the radius
   float large_variance =
-      radius / variance_factor * perlin1d(seed + 10.0 * st.x);
+      warp_depth * radius *
+      perlin1d(seed + warp_rate * sin(deg2rad(angle + 50.0 * radius)));
   // small modulations in the variance
-  float small_variance = thickness * perlin2d(40.0 * st + seed);
+  float small_variance = thickness * perlin2d(small_variance_rate * st + seed);
   // update distance with the variance
   dist_mag = dist_mag + large_variance + small_variance;
   // noise based on angle from the center point, and some splotches for texture
-  float pen_variance = 1.0 - 0.25 * perlin1d(10.0 * angle + 20.0 * dist_mag) -
-                       ink_specks(st, seed, 0.85);
-
+  float scratches =
+      1.0 - 0.9 * step(scratch_thresh,
+                       perlin2d(vec2(
+                           angle,
+                           scratch_len * dist_mag)));  // + 20.0 * dist_mag);
+  float splotches =
+      ink_specks(st, seed, 1.0, 0.9) * (1.0 - step(radius, dist_mag));
+  float paint_gradients =
+      paint_gradient_settings[0] * rand2d(st) *
+      ink_specks(st, paint_gradient_settings[1], paint_gradient_settings[2],
+                 paint_gradient_settings[3]) *
+      (1.0 - step(radius, dist_mag));
   float pixel_depth =
-      pen_variance * (smoothstep(radius, radius + thickness / 2.0, dist_mag) -
-                      smoothstep(radius + 1.5 * thickness,
-                                 radius + 2.0 * thickness, dist_mag));
+      scratches *
+      (smoothstep(radius - 0.002, radius, dist_mag) -
+       smoothstep(radius + thickness, radius + thickness + 0.002, dist_mag));
 
-  return pixel_depth;
+  return clamp(0.0, 1.0, pixel_depth - splotches + paint_gradients);
 }
 
 float roundedFrame(vec2 pos, vec2 size, float radius, float thickness) {
@@ -151,40 +170,54 @@ void main() {
   vec2 st = gl_FragCoord.xy / u_resolution.xy;
 
   float grain = 0.05 * rand2d(st);
-  float specks = ink_specks(st, u_speck_offset, 0.97);
+  float specks = ink_specks(st, u_speck_offset, 1.0, 0.97);
   vec3 background_color_rgb = vec3(0.988, 0.984, 0.961);
   const float max_radius = 0.35;
-  const int num_rings = 31;
-  float step_size = max_radius / float(num_rings);
+  const float num_rings = 30.0;
+  float step_size = max_radius / num_rings;
   float seed = 6.5;  // 0.75 * sin(u_time / 10.0) + 6.5;  // 6.5;
-  float variance = 7.0;
-  float thickness = 0.005;
+  float variance = 0.2;
+  float thickness = u_ring_thickness * step_size;
   vec2 center_point = vec2(0.5, 0.5);
   vec2 draw_pt = rotateAroundPoint(st, center_point, deg2rad(143.));
   float rings = 0.0;  // tree_ring(draw_pt, center_point, max_radius +
                       // step_size, 2.0 * thickness, seed, variance);
   float radius = step_size;
 
-  // draw 31 rings
-  for (int i = 0; i < num_rings; ++i) {
+  // draw rings
+  for (float i = 0.0; i < num_rings; ++i) {
+    // vary the thickness of the rings
+    float density_factor = (0.5 + 0.75 * perlin1d(50.0 * i));
+    float thickness_r = thickness * density_factor;
     // make the last ring thicker
-    if (i == num_rings - 1) {
-      thickness = thickness * 3.0;
+    if (i == num_rings - 1.0) {
+      thickness_r = thickness * 3.0;
+      float texture = 1.0 - 0.2 * rand2d(st);
+      rings += texture * tree_ring(draw_pt, center_point, radius, thickness_r,
+                                   seed, u_warp_depth, u_warp_rate,
+                                   u_small_variance_rate, u_scratch_thresh,
+                                   u_scratch_len, u_paint_gradient_settings);
+
+    } else {
+      rings +=
+          tree_ring(draw_pt, center_point, radius, thickness_r, seed,
+                    u_warp_depth, u_warp_rate, u_small_variance_rate,
+                    u_scratch_thresh, u_scratch_len, u_paint_gradient_settings);
     }
-    rings += tree_ring(draw_pt, center_point, radius,
-                       thickness * (0.5 + perlin1d(50.0 * float(i))), seed,
-                       variance);
-    radius += step_size * (0.25 * perlin1d(1.0 * float(i)) + 1.0);
+
+    radius += step_size * (0.15 + density_factor);
   }
 
   // draw splits
   // create the random dips
   const int num_splits = 11;
+  const float split_step_size = 360.0 / float(num_splits);
+  float split_pos = 0.0;  // angle
   for (int i = 0; i < num_splits; ++i) {
-    rings =
-        mix(rings, 0.0,
-            tree_splits(draw_pt, center_point, radius,
-                        float(i) * 360.0 / float(num_splits), float(i) * 35.0));
+    rings = mix(rings, 0.0,
+                tree_splits(draw_pt, center_point, radius, split_pos,
+                            0.7 * perlin1d(float(i))));
+    split_pos += split_step_size * (1.0 + perlin1d(float(i)));
   }
 
   vec3 sum = mix(background_color_rgb, vec3(0.0), specks + grain);

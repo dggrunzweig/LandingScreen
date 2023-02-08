@@ -1,3 +1,5 @@
+var gui = new dat.GUI({ name: 'My GUI' });
+
 let canvas;
 
 let image_height = 400;
@@ -11,7 +13,27 @@ let frame_color = [0.992, 0.996, 0.996];
 let rotation = 143.0;//360 * Math.random();
 console.log("Rotation: " + rotation);
 
+// shader GUI variables
 let speck_offset = 100 * Math.random();
+
+var scratch_thresh = { scratch_thresh: 0.91 };
+gui.add(scratch_thresh, 'scratch_thresh', 0.0, 1.0);
+var scratch_len = { scratch_len: 7.6 };
+gui.add(scratch_len, 'scratch_len', 0.0, 50.0);
+var warp_depth = { warp_depth: 0.26 };
+gui.add(warp_depth, 'warp_depth', 0.0, 1.0, 0.001);
+var warp_rate = { warp_rate: 5.2 };
+gui.add(warp_rate, 'warp_rate', 0.0, 12.0);
+var small_variance_rate = { small_variance_rate: 46.0 };
+gui.add(small_variance_rate, 'small_variance_rate', 0.0, 100.0);
+var ring_thickness = { ring_thickness: 0.4 };
+gui.add(ring_thickness, 'ring_thickness', 0.0, 1.0, 0.001);
+// good offsets = 3.3, 10
+var paint_gradient = { intensity: 0.141, offset: 10.0, zoom: 0.034, threshold: 0.4 };
+gui.add(paint_gradient, 'intensity', 0.0, 1.0, 0.001);
+gui.add(paint_gradient, 'zoom', 0.0, 0.1, 0.001);
+gui.add(paint_gradient, 'offset', 0.0, 10.0);
+gui.add(paint_gradient, 'threshold', 0.0, 1.0, 0.001);
 
 let grid_mode = Math.floor(3 * Math.random());
 let color_mode = Math.floor(2 * Math.random());
@@ -31,12 +53,6 @@ let note_index = 0;
 
 let time = 0;
 
-// audio
-let chord_module;
-let audio_ctx;
-let analyzer;
-let last_rms = 0.0;
-let rms_sum = 0.0;
 
 window.preload = () => {
   // load the shader
@@ -103,6 +119,14 @@ window.draw = () => {
   dot_shader.setUniform("u_speck_offset", speck_offset);
   dot_shader.setUniform("u_frame_color", frame_color);
   dot_shader.setUniform("u_rotation", rotation);
+  dot_shader.setUniform("u_warp_depth", warp_depth.warp_depth);
+  dot_shader.setUniform("u_warp_rate", warp_rate.warp_rate);
+  dot_shader.setUniform("u_small_variance_rate", small_variance_rate.small_variance_rate);
+  dot_shader.setUniform("u_scratch_thresh", scratch_thresh.scratch_thresh);
+  dot_shader.setUniform("u_scratch_len", scratch_len.scratch_len);
+  let ring_thickness_mod = ring_thickness.ring_thickness + 0.1 * Math.sin(time);
+  dot_shader.setUniform("u_ring_thickness", ring_thickness_mod);
+  dot_shader.setUniform("u_paint_gradient_settings", [paint_gradient.intensity, paint_gradient.offset, paint_gradient.zoom, paint_gradient.threshold]);
 
   dot_buffer.shader(dot_shader);
   dot_buffer.rect(border_width, border_width, image_width, image_height);
