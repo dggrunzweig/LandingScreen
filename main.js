@@ -1,58 +1,42 @@
 import * as THREE from 'three';
-
-// Set up scene
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// Create a plane geometry
-const geometry = new THREE.PlaneGeometry(2, 2);
-
-const clock = new THREE.Clock();
-let fragmentShader
-let vertexShader;
-let mesh;
+import vertex from './shaders/vertex.js'
+import fragment from './shaders/fragment.js'
 
 const uniforms = {
   u_time: { value: 0.0 },
   u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
 };
+const clock = new THREE.Clock();
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+const renderer = new THREE.WebGLRenderer();
 
-fetch('shader.frag')
-  .then(response => response.text())
-  .then((fshader) => {
-    fragmentShader = fshader;
-    fetch('shader.vert')
-      .then(response => response.text())
-      .then((vshader) => {
-        vertexShader = vshader;
+const init = () => {
+  // Create a plane geometry
+  const geometry = new THREE.PlaneGeometry(2, 2);
 
-        // Create a shader material
-        const material = new THREE.ShaderMaterial({
-          vertexShader: vertexShader,
-          fragmentShader: fragmentShader,
-          uniforms: uniforms
-        });
-
-        // Create a mesh with the shader material
-        mesh = new THREE.Mesh(geometry, material);
-        scene.add(mesh);
-
-        // Set camera position
-        camera.position.z = 5;
-
-        // start clock
-        clock.start();
-
-        console.log("Loaded");
-        // Start the animation
-        animate();
-
-      });
+  // Create a shader material
+  const material = new THREE.ShaderMaterial({
+    uniforms: uniforms,
+    vertexShader: vertex,
+    fragmentShader: fragment
   });
 
+  // Create a mesh with the shader material
+  const mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
+
+  // Set up renderer
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // start clock
+  clock.start();
+
+  console.log("Loaded");
+  // Start the animation
+}
 
 // Animation function
 const animate = () => {
@@ -66,6 +50,7 @@ const animate = () => {
 
 // Handle window resize
 window.addEventListener('resize', () => {
+  console.log("Window Resizing");
   const newWidth = window.innerWidth;
   const newHeight = window.innerHeight;
 
@@ -76,3 +61,7 @@ window.addEventListener('resize', () => {
 
   uniforms.u_resolution.value.set([newWidth, newHeight]);
 });
+
+
+init();
+animate();
