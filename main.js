@@ -1,11 +1,24 @@
 import * as THREE from 'three';
 import vertex from './shaders/vertex.js'
 import fragment from './shaders/fragment.js'
+import { Pane } from 'tweakpane';
+
+const pane = new Pane();
+const PARAMS = {
+  gradient_size: 0.0001,
+}
 
 const uniforms = {
+  u_gradient_size: { value: PARAMS.gradient_size },
   u_time: { value: 0.0 },
   u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
 };
+
+pane.addBinding(PARAMS, 'gradient_size', { min: 0.000001, max: 0.1 }).on('change', (ev) => {
+  uniforms.u_gradient_size.value = ev.value;
+
+});
+
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
