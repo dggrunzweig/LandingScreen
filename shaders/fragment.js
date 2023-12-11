@@ -1,15 +1,17 @@
 const fragment = /* glsl */ `
 
 varying vec2 vUv;
+uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_gradient_size;
 
 // Constants
 #define MAX_STEPS 40 // Mar Raymarching steps
 #define MAX_DIST 20. // Max Raymarching distance
-#define TEXTURE_HEIGHT 1.
-#define TEXTURE_ELEV -2.
 #define PI 3.141592654
+#define DOF 0.1
+#define FOCAL_LEN = 4
+vec3 sphere_c = vec3(0., 0., 5.);
  
 float map(float value, float min1, float max1, float min2, float max2) {
   return (value - min1) / (max1 - min1) * (max2 - min2) + min2;
@@ -162,6 +164,26 @@ float SDFBox( vec3 p, vec3 center, vec3 dim, vec3 rotation )
   return length(max(dist,0.0)) + min(MaxVec3(dist),0.0);
 }
 
+float SDFSphere(vec3 p, vec3 center, float radius, vec3 rotation ) {
+  // translate to center, rotate, translate back
+  p -= center;
+  // rotating
+  p = p * rotateX(rotation.x) * rotateY(rotation.y) * rotateZ(rotation.z);
+  // scaling
+  p = p * vec3(1.5, 0.6, 1.);
+  p += center;
+
+  vec3 p_diff = p - center;
+  float theta_x = atan(p_diff.x / p_diff.z);
+  float theta_y = atan(p_diff.y / p_diff.z);
+
+  vec3 rad_3 = 0.1 * vec3(radius, radius, radius);
+
+  float dist = length(p_diff) - length(rad_3 + vec3(0.5 * sin(11.0 * theta_x + u_time), 1.0, 0.7 * sin(7. * theta_y + 2.0 * u_time)));
+  dist += 0.00002 * rand2d(vec2(theta_x, theta_y));
+  return dist;
+}
+
 float SDF(vec3 p) {
   // transforms
  // Rotation in XY
@@ -176,8 +198,10 @@ float SDF(vec3 p) {
 
   // determine sdf
   vec3 box_c = vec3(0., 0., 5.);
-  vec3 box_d = vec3(1., 1., 1.);
-  return SDFBox(p, box_c, box_d, vec3(u_time / 2.));
+  vec3 box_d = vec3(1., 3., 2.);
+  float box = SDFBox(p, box_c, box_d, vec3(0.));
+
+  return max(SDFSphere(p, sphere_c + vec3(0., 0., 0.1 + sin(u_time)), 1., vec3(0., 0., 0.)), box);
 }
 
 vec3 NormalFromGradient(vec3 p)
@@ -192,22 +216,24 @@ vec3 NormalFromGradient(vec3 p)
     return normalize(n);
 }
  
-float RayMarch(vec3 ro, vec3 rd) 
+float RayMarch(vec3 ro, vec3 rd, out bool hit) 
 {
   float dO = 0.;
   float dO_last = 0.;
+  hit = false;
   // ray march if the ray is valid to intersect the plane
   for (int i = 0; i < MAX_STEPS; i++)
   { 
     vec3 p = ro + rd * dO;
     float dT = SDF(p);
     dO += max(dT, 0.0);
-    if (abs(dT) < 0.01) {
+    if (dT < 0.01) {
+      hit = true;
       return dO;
     }
-    if (dO > MAX_DIST) return -1.0;
+    if (dO > MAX_DIST) return dO;
   }
-  return -1.0;
+  return dO;
 }
 
  
@@ -215,7 +241,7 @@ float RayMarch(vec3 ro, vec3 rd)
 float lighting(vec3 p)
 { 
     // Light Position
-    vec3 light_pos = vec3(0., 2., 3.);
+    vec3 light_pos = vec3(2., 2., 2.);
     float light_dist = length(light_pos - p);
     vec3 l = normalize(light_pos-p); // normalized light to object vector
     vec3 n = NormalFromGradient(p); // Get Normal Vector
@@ -236,18 +262,11 @@ float lighting(vec3 p)
 }
 
 vec3 color_map(vec3 p) {
-  float scale = map(p.y, TEXTURE_ELEV, TEXTURE_ELEV + TEXTURE_HEIGHT, 0., 1.);
-  return mix(vec3(0.188,0.271,0.161), vec3(1.0, 1.0, 1.0), scale);
-}
-
-vec3 cartesianToSpherical(vec3 cart) {
-  float r = length(cart);
-  float theta = atan(cart.y,cart.x);
-  float phi = atan(sqrt(cart.x*cart.x+cart.y*cart.y),cart.z);
-  return vec3(r, theta, phi);
-}
-vec3 sphericalToCartesian(vec3 sph_coor) {
-  return vec3(sph_coor.x * sin(sph_coor.y) * cos(sph_coor.z), sph_coor.x * sin(sph_coor.y) * sin(sph_coor.z), sph_coor.x * cos(sph_coor.y));
+  float dist = distance(p, sphere_c);
+  vec3 p_diff = p - sphere_c;
+  float theta_x = atan(p_diff.x / p_diff.z);
+  float theta_y = atan(p_diff.y / p_diff.z);
+  return mix(vec3(0.,0.278,0.671), vec3(1.0, 1.0, 1.0), 0.5 * (0.5 * sin(4.10 * theta_x + u_time) + 0.5) * (0.5 * sin(3.0 * theta_y + u_time) + 0.5));//20.0 * abs(dist));
 }
  
 void main()
@@ -255,12 +274,24 @@ void main()
     vec2 uv = 2.*vUv - 1.;
     float camera_r = 2.0;
     vec3 camera_pos = vec3(0.0,0.,-5.0); // Ray Origin/Camera
-    vec3 rd = normalize(vec3(uv.x,uv.y,0.) - camera_pos); // Ray Direction From Camera through pixel
+    const int up_sample = 8;
+    vec2 inc = 2. / (u_resolution * vec2(up_sample));
+    float d = 0.;
     vec3 ro = camera_pos; 
-    float d = RayMarch(ro,rd); // Distance
-    if (d < 0.) 
+    bool hit = false;
+    for (int i = 0; i < up_sample; ++i) {
+      vec3 rd = normalize(vec3(uv.x + float(i) * inc.x, uv.y + float(i) *  inc.y,0.) - camera_pos); // Ray Direction From Camera through pixel
+      float d_ss = RayMarch(ro, rd, hit);
+      if (hit == false) break;
+      else 
+        d += d_ss;
+    }
+    d /= float(up_sample);
+   
+    if (!hit) 
       gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     else {
+      vec3 rd = normalize(vec3(uv.x,uv.y,0.) - camera_pos); // Ray Direction From Camera through pixel
       vec3 p = ro + rd * d;
       vec3 color = color_map(p);
       float light_scale = lighting(p);
@@ -268,7 +299,7 @@ void main()
   
       // Set the output color
       // gl_FragColor = vec4(color, 1.0);
-      gl_FragColor = vec4(vec3(light_scale), 1.);
+      gl_FragColor = vec4(color, 1.);
     }
     // float text = (SurfTexture(vec3(2.0 * vUv.x, 0., 2. * vUv.y)) - TEXTURE_ELEV) / TEXTURE_HEIGHT;
     // gl_FragColor = vec4(vec3(text), 1.0);
