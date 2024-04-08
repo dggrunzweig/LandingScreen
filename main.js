@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import vertex from './shaders/vertex.js'
 import fragment from './shaders/fragment.js'
 import { Pane } from 'tweakpane';
+import AudioMain from './AudioMain.ts';
 
+const audio = new AudioMain();
 const pane = new Pane();
 const PARAMS = {
   gradient_size: 0.0001,
@@ -49,6 +51,7 @@ const init = () => {
 
   console.log("Loaded");
   // Start the animation
+
 }
 
 // Animation function
@@ -74,6 +77,14 @@ window.addEventListener('resize', () => {
 
   uniforms.u_resolution.value.set([newWidth, newHeight]);
 });
+
+window.addEventListener("keyup", (e) => {
+  if (e.key === " ") {
+    audio.start();
+  }
+});
+
+
 
 
 init();

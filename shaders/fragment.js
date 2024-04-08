@@ -185,23 +185,12 @@ float SDFSphere(vec3 p, vec3 center, float radius, vec3 rotation ) {
 }
 
 float SDF(vec3 p) {
-  // transforms
- // Rotation in XY
-//  float t = sin(u_time) * PI / 4.;
-//  mat4 R = mat4(
-//  vec4(cos(t), sin(t), 0, 0),
-//  vec4(-sin(t), cos(t), 0, 0),
-//  vec4(0, 0, 1, 0),
-//  vec4(0, 0, 0, 1));
-
-//  p = (vec4(p, 1) * inverse(R)).xyz;
-
   // determine sdf
   vec3 box_c = vec3(0., 0., 5.);
-  vec3 box_d = vec3(1., 3., 2.);
-  float box = SDFBox(p, box_c, box_d, vec3(0.));
+  vec3 box_d = vec3(1., 2., 1.);
+  float box = SDFBox(p, box_c, box_d, vec3(0., u_time / 4., 0.));
 
-  return max(SDFSphere(p, sphere_c + vec3(0., 0., 0.1 + sin(u_time)), 1., vec3(0., 0., 0.)), box);
+  return max(SDFSphere(p, sphere_c + vec3(0., 0., 0.1 + sin(u_time / 4.)), 1., vec3(0., 0., 0.)), box);
 }
 
 vec3 NormalFromGradient(vec3 p)
@@ -266,7 +255,7 @@ vec3 color_map(vec3 p) {
   vec3 p_diff = p - sphere_c;
   float theta_x = atan(p_diff.x / p_diff.z);
   float theta_y = atan(p_diff.y / p_diff.z);
-  return mix(vec3(0.,0.278,0.671), vec3(1.0, 1.0, 1.0), 0.5 * (0.5 * sin(4.10 * theta_x + u_time) + 0.5) * (0.5 * sin(3.0 * theta_y + u_time) + 0.5));//20.0 * abs(dist));
+  return mix(vec3(0.,0.278,0.671), vec3(1.0, 1.0, 1.0), 0.5);//0.5 * (0.5 * sin(4.10 * theta_x + u_time) + 0.5) * (0.5 * sin(3.0 * theta_y + u_time) + 0.5));//20.0 * abs(dist));
 }
  
 void main()
@@ -274,7 +263,7 @@ void main()
     vec2 uv = 2.*vUv - 1.;
     float camera_r = 2.0;
     vec3 camera_pos = vec3(0.0,0.,-5.0); // Ray Origin/Camera
-    const int up_sample = 8;
+    const int up_sample = 4;
     vec2 inc = 2. / (u_resolution * vec2(up_sample));
     float d = 0.;
     vec3 ro = camera_pos; 
