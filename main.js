@@ -11,7 +11,7 @@ const PARAMS = {
 }
 
 const uniforms = {
-  u_gradient_size: { value: PARAMS.gradient_size },
+  u_mixer_levels: { value: [0., 0., 0., 0., 0.] },
   u_time: { value: 0.0 },
   u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
 };
@@ -42,8 +42,10 @@ const init = () => {
   scene.add(mesh);
 
   // Set up renderer
+  const min_dim = Math.min(window.innerWidth, window.innerHeight);
+  camera.aspect = 1.0;
   renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(min_dim, min_dim);
   document.body.appendChild(renderer.domElement);
 
   // start clock
@@ -59,6 +61,9 @@ const animate = () => {
   requestAnimationFrame(animate);
 
   uniforms.u_time.value = clock.getElapsedTime();
+  const levels = audio.GetMixerLevels();
+  uniforms.u_mixer_levels.value = levels;
+  // console.log(levels);
 
   // Render the scene
   renderer.render(scene, camera);
@@ -69,13 +74,13 @@ window.addEventListener('resize', () => {
   console.log("Window Resizing");
   const newWidth = window.innerWidth;
   const newHeight = window.innerHeight;
-
-  camera.aspect = newWidth / newHeight;
+  const min_dim = Math.min(newWidth, newHeight);
+  camera.aspect = 1.0;
   camera.updateProjectionMatrix();
 
-  renderer.setSize(newWidth, newHeight);
+  renderer.setSize(min_dim, min_dim);
 
-  uniforms.u_resolution.value.set([newWidth, newHeight]);
+  uniforms.u_resolution.value.set([min_dim, min_dim]);
 });
 
 window.addEventListener("keyup", (e) => {
