@@ -1,8 +1,7 @@
-import Analyzer from './audio/Analyzer.ts'
 import AudioMixer from './audio/AudioMixer.ts'
 import LFO from './audio/LFO.ts'
 import {NoteState, RandomMarkovCreate, RandomMarkovGenerateNote} from './audio/RandomMarkov.ts';
-import {BitCrushCurve, HyperTanDistortionCurve} from './audio/SaturationDesigner.ts';
+import {HyperTanDistortionCurve} from './audio/SaturationDesigner.ts';
 import TapeDelay from './audio/TapeDelay.ts'
 import {BPMToTime, clamp, createAudioContext, createBiquadFilter, createCompressor, createGain, CreateNoiseOscillator, createOscillator, createReverb, createStereoPanner, createWaveShaper, db2mag, GetMaxAbsValue, NoteToPitch} from './audio/Utilities.ts';
 
@@ -60,8 +59,7 @@ class AudioMain {
   private num_sequences = 3;
   private loaded = false;
   private started = false;
-  private playing = false;
-  private analyzer: Analyzer;
+  public playing = false;
   private states: NoteState[];
   private transition_matrix: number[][];
   private output_gain: GainNode;
@@ -73,7 +71,8 @@ class AudioMain {
   private seq_timers: number[];
   private ci: number[];
   private ct: number[];
-  private startable_nodes = new Array<AudioNode>();
+  private chord_osc = new Array<OscillatorNode>();
+  private noise_osc: AudioBufferSourceNode;
   private last_note = 0;
   constructor() {
     this.ctx = createAudioContext();
@@ -102,7 +101,6 @@ class AudioMain {
 
     this.transition_matrix = RandomMarkovCreate(this.states);
 
-    this.analyzer = new Analyzer(this.ctx);
     this.delay =
         new TapeDelay(this.ctx, Math.random, BPMToTime(this.bpm, 2 / 8), 0.4);
 
@@ -111,43 +109,48 @@ class AudioMain {
     const saturator =
         createWaveShaper(this.ctx, HyperTanDistortionCurve(0, 0), '4x');
 
-    createReverb(this.ctx, 4.1, 5000, false).then((send_b) => {
-      this.mixer = new AudioMixer(limiter, this.delay.input, send_b);
-      this.delay.connect(this.output_gain);
-      send_b.connect(this.output_gain);
+    const send_b = createGain(this.ctx, 1.0);
+    this.mixer = new AudioMixer(limiter, this.delay.input, send_b);
+    this.delay.connect(this.output_gain);
 
-      const noise = CreateNoiseOscillator(this.ctx);
-      const noise_filter =
-          createBiquadFilter(this.ctx, 'lowpass', 4000, 1.0, 0.0);
-      noise.connect(noise_filter)
-          .connect(this.mixer.AddTrack(this.ctx, -40, -40, -40, 0));
-      this.startable_nodes.push(noise);
+    this.noise_osc = CreateNoiseOscillator(this.ctx);
+    const noise_filter =
+        createBiquadFilter(this.ctx, 'lowpass', 4000, 1.0, 0.0);
+    this.noise_osc.connect(noise_filter)
+        .connect(this.mixer.AddTrack(this.ctx, -40, -40, -40, 0));
 
+    // chord
+    const chord_osc_1 =
+        createOscillator(this.ctx, 'sine', NoteToPitch('C', 3), 0);
+    const chord_osc_2 =
+        createOscillator(this.ctx, 'sine', NoteToPitch('G', 3), 0);
+    const chord_osc_3 =
+        createOscillator(this.ctx, 'sine', NoteToPitch('D', 4), 0);
+    this.chord_osc.push(chord_osc_1, chord_osc_2, chord_osc_3);
+    const chord_gain = createGain(this.ctx, 0);
+    chord_osc_1.connect(chord_gain);
+    chord_osc_2.connect(chord_gain);
+    chord_osc_3.connect(chord_gain);
+    this.chord_lfo = new LFO(this.ctx, 0.1, db2mag(-35), db2mag(-15));
+    this.chord_lfo.connect(chord_gain.gain);
+    chord_gain.connect(this.mixer.AddTrack(this.ctx, 0, -12, -24, 0));
 
-      // chord
-      const chord_osc_1 =
-          createOscillator(this.ctx, 'sine', NoteToPitch('C', 3), 0);
-      const chord_osc_2 =
-          createOscillator(this.ctx, 'sine', NoteToPitch('G', 3), 0);
-      const chord_osc_3 =
-          createOscillator(this.ctx, 'sine', NoteToPitch('D', 4), 0);
-      this.startable_nodes.push(chord_osc_1, chord_osc_2, chord_osc_3);
-      const chord_gain = createGain(this.ctx, 0);
-      chord_osc_1.connect(chord_gain);
-      chord_osc_2.connect(chord_gain);
-      chord_osc_3.connect(chord_gain);
-      this.chord_lfo = new LFO(this.ctx, 0.1, db2mag(-35), db2mag(-15));
-      this.chord_lfo.connect(chord_gain.gain);
-      chord_gain.connect(this.mixer.AddTrack(this.ctx, 0, -12, -24, 0));
+    // sequence inputs
+    for (let i = 0; i < this.num_sequences + 1; ++i) {
+      this.sequence_inputs.push(this.mixer.AddTrack(this.ctx, -9, -6, -6, 0));
+    }
 
-      // sequence inputs
-      for (let i = 0; i < this.num_sequences + 1; ++i) {
-        this.sequence_inputs.push(this.mixer.AddTrack(this.ctx, -9, -6, -6, 0));
-      }
+    limiter.connect(saturator)
+        .connect(this.output_gain)
+        .connect(this.ctx.destination);
 
-      limiter.connect(saturator)
-          .connect(this.output_gain)
-          .connect(this.ctx.destination);
+    this.levels = new Array<number>(this.mixer.ChannelCount()).fill(0);
+    this.seq_timers = new Array<number>(2).fill(0);
+    this.ci = new Array<number>(2).fill(0);
+    this.ct = new Array<number>(2).fill(0);
+
+    createReverb(this.ctx, 4.1, 5000, false).then((reverb) => {
+      send_b.connect(reverb).connect(this.output_gain);
       this.loaded = true;
     });
   }
@@ -204,9 +207,10 @@ class AudioMain {
   }
   public UpdateMouse(x: number, y: number) {
     const notes = [
-      {n: 'C', o: 1, d: 2}, {n: 'C', o: 2, d: 2}, {n: 'D', o: 2, d: 2},
-      {n: 'E', o: 2, d: 2}, {n: 'F#', o: 2, d: 2}, {n: 'G', o: 2, d: 2},
-      {n: 'A', o: 2, d: 2}, {n: 'B', o: 2, d: 2}, {n: 'C', o: 3, d: 2}
+      {n: 'A', o: 1, d: 2}, {n: 'D', o: 2, d: 2}, {n: 'F#', o: 2, d: 2},
+      {n: 'G', o: 2, d: 2}, {n: 'B', o: 2, d: 2}, {n: 'D', o: 3, d: 2},
+      {n: 'F#', o: 3, d: 2}, {n: 'G', o: 3, d: 2}
+
     ];
     const grid_width = 1 / notes.length;
     const m_i = this.sequence_inputs[this.num_sequences];
@@ -237,7 +241,8 @@ class AudioMain {
     }
     if (this.loaded) {
       if (!this.started) {
-        this.startable_nodes.forEach((node) => {node.start()});
+        this.chord_osc.forEach((node) => {node.start()});
+        this.noise_osc.start();
         this.delay.start();
         this.chord_lfo.start();
         this.started = true;
@@ -258,9 +263,9 @@ class AudioMain {
                           () => {return Math.floor(
                               Math.random() * this.states.length)});
         const la = 2;
-        const velocity = [db2mag(-6), db2mag(-3), db2mag(-30)];
+        const velocity = [db2mag(-9), db2mag(-3), db2mag(-30)];
         const oct = [1, 4, 20];
-        const prob = [0.7, 0.2, 0.2];
+        const prob = [0.7, 0.2, 0.4];
         const step_mod = [4, 2, 8];
         const mod_depth = [40, 200, 200];
         const mod_rate = [1.502, 3.03, 0.05];

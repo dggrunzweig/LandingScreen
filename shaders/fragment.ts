@@ -4,7 +4,6 @@ varying vec2 vUv;
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_mixer_levels[5];
-uniform float u_total_levels[5];
 uniform vec2 u_mouse_xy;
 // Constants
 #define PI 3.141592654
@@ -155,16 +154,18 @@ vec3 color_field(vec2 st, float t, float level) {
   return c;
 }
 
-vec3 grain(vec2 st, float t, float noise_depth) {
+float grain(vec2 st, float t, float noise_depth) {
   float grain_d = 0.1;
-  vec3 circles = base_color(true);
-  vec2 grid_pos = st + vec2(0.4 * sin(0.5 + 0.5 * stepped_random(st.y, grain_d)) + 0.2 * u_mixer_levels[4] * sin(20. * st.y + 6.0 * t), 0.);
+  float circles = 0.0;
+  vec2 grid_pos = st + vec2(0.4 * sin(0.5 + 0.5 * stepped_random(st.y, grain_d)), 0.);
+  grid_pos.x += 0.2 * u_mixer_levels[4] * sin(40. * quantize(st.y + 6.0 * t, grain_d));
+
   float scale = 0.7 + 0.3 * sin(2. * stepped_random_2d(grid_pos, vec2(grain_d)) * t); // subtle flashing
   vec2 xy = mod(grid_pos, vec2(grain_d)); // grid
   vec2 center = vec2(grain_d * stepped_random_2d(2.0 * grid_pos, vec2(grain_d)));
   for (float i = 0.; i < 3.; ++i) {
     center += 0.2 * grain_d * vec2(10. * u_mixer_levels[int(i) + 1] * sin(i * t), 10. * u_mixer_levels[int(i) + 1] * cos(i * t));
-    circles = mix(circles, color_field(grid_pos, t, u_mixer_levels[3]), 0.5 * scale * circle(xy, center, 0.4 * grain_d, 0.6));
+    circles = mix(circles, 1.0, 0.5 * scale * circle(xy, center, 0.4 * grain_d, 0.6));
   }
   return circles;
 }
@@ -175,9 +176,10 @@ void main()
   vec2 st = vec2(vUv.x / a_r, vUv.y);
   float f_rate = 10.;
   float quant_time = quantize(u_time, 1. / f_rate);
-  vec3 grains = grain(st, quant_time, 0.1);  
+  float grains = grain(st, quant_time, 0.1);
+  vec3 colors = color_field(vUv, quant_time, u_mixer_levels[3]);  
   // gl_FragColor = vec4(color_field(vUv, quant_time, 0.0), 1.0);
-  gl_FragColor = vec4(grains, 1.0);
+  gl_FragColor = vec4(mix(base_color(true), colors, grains), 1.0);
 
   // gl_FragColor = vec4(vec3(circle(vUv, u_mouse_xy, 0.1)), 1.0);
 }
