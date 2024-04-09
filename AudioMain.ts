@@ -4,7 +4,7 @@ import LFO from './audio/LFO.ts'
 import {NoteState, RandomMarkovCreate, RandomMarkovGenerateNote} from './audio/RandomMarkov.ts';
 import {BitCrushCurve, HyperTanDistortionCurve} from './audio/SaturationDesigner.ts';
 import TapeDelay from './audio/TapeDelay.ts'
-import {BPMToTime, createAudioContext, createBiquadFilter, createCompressor, createGain, CreateNoiseOscillator, createOscillator, createReverb, createStereoPanner, createWaveShaper, db2mag, GetMaxAbsValue, NoteToPitch} from './audio/Utilities.ts';
+import {BPMToTime, clamp, createAudioContext, createBiquadFilter, createCompressor, createGain, CreateNoiseOscillator, createOscillator, createReverb, createStereoPanner, createWaveShaper, db2mag, GetMaxAbsValue, NoteToPitch} from './audio/Utilities.ts';
 
 interface ADSR {
   a: number, d: number, s: number, sl: number, r: number
@@ -74,6 +74,7 @@ class AudioMain {
   private ci: number[];
   private ct: number[];
   private startable_nodes = new Array<AudioNode>();
+  private last_note = 0;
   constructor() {
     this.ctx = createAudioContext();
     this.time_per_step = BPMToTime(this.bpm, 1 / 16);
@@ -140,8 +141,8 @@ class AudioMain {
       chord_gain.connect(this.mixer.AddTrack(this.ctx, 0, -12, -24, 0));
 
       // sequence inputs
-      for (let i = 0; i < this.num_sequences; ++i) {
-        this.sequence_inputs.push(this.mixer.AddTrack(this.ctx, -3, -6, -6, 0));
+      for (let i = 0; i < this.num_sequences + 1; ++i) {
+        this.sequence_inputs.push(this.mixer.AddTrack(this.ctx, -9, -6, -6, 0));
       }
 
       limiter.connect(saturator)
@@ -200,6 +201,34 @@ class AudioMain {
       return new_levels;
     }
     return new Array(this.num_sequences + 2).fill(0);
+  }
+  public UpdateMouse(x: number, y: number) {
+    const notes = [
+      {n: 'C', o: 1, d: 2}, {n: 'C', o: 2, d: 2}, {n: 'D', o: 2, d: 2},
+      {n: 'E', o: 2, d: 2}, {n: 'F#', o: 2, d: 2}, {n: 'G', o: 2, d: 2},
+      {n: 'A', o: 2, d: 2}, {n: 'B', o: 2, d: 2}, {n: 'C', o: 3, d: 2}
+    ];
+    const grid_width = 1 / notes.length;
+    const m_i = this.sequence_inputs[this.num_sequences];
+    const i = clamp(Math.floor(x / grid_width), 0, notes.length - 1);
+    const note = NoteToPitch(notes[i].n, 2 + notes[i].o);
+
+    if (note != this.last_note) {
+      const osc = {
+        type: <OscillatorType>'sine',
+        freq: note,
+        adsr: {a: 0.01, d: 0.4, s: 0, sl: 0, r: 0}
+      };
+      const mod_osc = {
+        type: <OscillatorType>'sine',
+        freq: y * 10. * note,
+        adsr: {a: 0.01, d: 0.3, s: 0, sl: 0, r: 0}
+      };
+      SimpleFM(
+          this.ctx, m_i, osc, mod_osc, 200, db2mag(-9), this.ctx.currentTime,
+          2 * x - 1);
+      this.last_note = note;
+    }
   }
   public start() {
     if (this.ctx.state == 'suspended') {

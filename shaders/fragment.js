@@ -5,8 +5,7 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_mixer_levels[5];
 uniform float u_total_levels[5];
-uniform float u_bark_bands[3];
-
+uniform vec2 u_mouse_xy;
 // Constants
 #define PI 3.141592654
  
@@ -61,14 +60,14 @@ vec2 rotate(vec2 v, float a) {
 	return m * v;
 }
 
-float circle(vec2 st, vec2 center, float radius) {
+float circle(vec2 st, vec2 center, float radius, float smoothing) {
   float dist = sqrt(pow(st.x - center.x, 2.0) + pow(st.y - center.y, 2.0));
-  return 1.0 - smoothstep(radius*0.6, radius, dist);
+  return 1.0 - smoothstep(radius*smoothing, radius, dist);
 }
 
 
 float ring(vec2 st, vec2 center, float radius, float width) {
-  return circle(st, center, radius) - circle(st, center, radius - width);
+  return circle(st, center, radius, 0.9) - circle(st, center, radius - width, 0.9);
 }
 
 float radial_dist(vec2 st, vec2 center) {
@@ -133,48 +132,54 @@ float squares(vec2 st, float t, float noise_depth) {
   return squares.x * squares.y;
 }
 
-vec3 base_color() {
-  return vec3(0.004,0.012,0.027);
+vec3 base_color(bool dark) {
+  if (dark)
+    return vec3(0.004,0.012,0.027);
+  else
+    return vec3(0.992,0.957,0.906);
 }
 
 vec3 color_field(vec2 st, float t, float level) {
   vec3 color = vec3(0.675,0.231,0.145); // red
-  vec3 base = base_color();
+  // vec3 color = vec3(0.051,0.141,0.271); // blue
+  vec3 base = base_color(true);
   float stripes = (0.95 + 0.05 * stepped_random_2d(st, vec2(1., 0.001)));
   float noise = rand2d(st) * 0.2;
-  float accent_map = fbn(2. * st, 4. * st, 8. * st, 0.4 + 0.2 * abs(sin(t)), 0.5, 0.6);
-  accent_map *= (0.4 + 0.6 * hannWindow(st.x + perlin1d(0.1 * t) * perlin1d(10. * st.y), 1.0 + perlin1d(0.1 * t), 0.5));
+  float accent_map = fbn(st + 0.1 * sin(-t / 2.), st + 0.1 * cos(t / 2.), st + 0.1 * sin(t / 2.), 0.4 + 0.2 * abs(sin(t)), 0.5, 0.6);
+  // accent_map *= (0.3 + 0.7 * hannWindow(st.x + perlin1d(0.1 * t) * perlin1d(10. * st.y), 0.8 + perlin1d(0.1 * t), 0.5));
   accent_map *= stripes;
   accent_map += noise;
   color = mix(color, hexToFloatColor(0xFDE9CD), 2. * level * squares(st, t, 0.));
+  color = mix(color, hexToFloatColor(0xFDE9CD), 0.4 * hannWindow(st.x, u_mouse_xy.x, 0.4) * hannWindow(st.y, u_mouse_xy.y, 0.7));
   vec3 c = mix(base, color, accent_map);
   return c;
 }
 
 vec3 grain(vec2 st, float t, float noise_depth) {
   float grain_d = 0.1;
-  vec3 circles = base_color();
+  vec3 circles = base_color(true);
   vec2 grid_pos = st + vec2(0.4 * sin(0.5 + 0.5 * stepped_random(st.y, grain_d)) + 0.2 * u_mixer_levels[4] * sin(20. * st.y + 6.0 * t), 0.);
-  float scale = 0.8 + 0.1 * sin(5. * stepped_random_2d(grid_pos, vec2(grain_d)) * t); // subtle flashing
+  float scale = 0.7 + 0.3 * sin(2. * stepped_random_2d(grid_pos, vec2(grain_d)) * t); // subtle flashing
   vec2 xy = mod(grid_pos, vec2(grain_d)); // grid
-    vec2 center = vec2(grain_d * stepped_random_2d(2.0 * grid_pos, vec2(grain_d)));
+  vec2 center = vec2(grain_d * stepped_random_2d(2.0 * grid_pos, vec2(grain_d)));
   for (float i = 0.; i < 3.; ++i) {
     center += 0.2 * grain_d * vec2(10. * u_mixer_levels[int(i) + 1] * sin(i * t), 10. * u_mixer_levels[int(i) + 1] * cos(i * t));
-    circles = mix(circles, color_field(grid_pos, t, u_mixer_levels[3]), 0.5 * scale * circle(xy, center, 0.4 * grain_d));
+    circles = mix(circles, color_field(grid_pos, t, u_mixer_levels[3]), 0.5 * scale * circle(xy, center, 0.4 * grain_d, 0.6));
   }
   return circles;
 }
 
 void main()
 {
-    float a_r = u_resolution.y / u_resolution.x;
-    vec2 st = vec2(vUv.x / a_r, vUv.y);
-    float f_rate = 10.;
-    float quant_time = quantize(u_time, 1. / f_rate);
-    vec3 grains = grain(st, quant_time, 0.1);
-    
-    // gl_FragColor = vec4(color_field(vUv), 1.0);
-    gl_FragColor = vec4(grains, 1.0);
+  float a_r = u_resolution.y / u_resolution.x;
+  vec2 st = vec2(vUv.x / a_r, vUv.y);
+  float f_rate = 10.;
+  float quant_time = quantize(u_time, 1. / f_rate);
+  vec3 grains = grain(st, quant_time, 0.1);  
+  // gl_FragColor = vec4(color_field(vUv, quant_time, 0.0), 1.0);
+  gl_FragColor = vec4(grains, 1.0);
+
+  // gl_FragColor = vec4(vec3(circle(vUv, u_mouse_xy, 0.1)), 1.0);
 }
 `;
 

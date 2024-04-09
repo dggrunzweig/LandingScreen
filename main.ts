@@ -10,6 +10,7 @@ const audio = new AudioMain();
 const uniforms = {
   u_mixer_levels: {value: [0., 0., 0., 0., 0.]},
   u_total_levels: {value: [0., 0., 0., 0., 0.]},
+  u_mouse_xy: {value: new THREE.Vector2(0, 0)},
   u_time: {value: 0.0},
   u_resolution:
       {value: new THREE.Vector2(window.innerWidth, window.innerHeight)}
@@ -35,8 +36,6 @@ const init =
       scene.add(mesh);
 
       // Set up renderer
-      const min_dim = Math.min(window.innerWidth, window.innerHeight);
-      camera.aspect = 1.0;
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
@@ -79,7 +78,14 @@ window.addEventListener('keyup', (e) => {
   }
 });
 
-
+renderer.domElement.onmousemove = (e: MouseEvent) => {
+  const x =
+      Math.min(Math.max(0, e.offsetX / renderer.domElement.clientWidth), 1.);
+  const y = 1 -
+      Math.min(Math.max(0, e.offsetY / renderer.domElement.clientHeight), 1.);
+  uniforms.u_mouse_xy.value = new THREE.Vector2(x, y);
+  audio.UpdateMouse(x, y, 0.05);
+};
 
 init();
 animate();
