@@ -4,7 +4,7 @@ import LFO from './audio/LFO.ts'
 import {NoteState, RandomMarkovCreate, RandomMarkovGenerateNote} from './audio/RandomMarkov.ts';
 import {BitCrushCurve, HyperTanDistortionCurve} from './audio/SaturationDesigner.ts';
 import TapeDelay from './audio/TapeDelay.ts'
-import {BPMToTime, createAudioContext, createBiquadFilter, createGain, CreateNoiseOscillator, createOscillator, createReverb, createStereoPanner, createWaveShaper, db2mag, GetMaxAbsValue, NoteToPitch} from './audio/Utilities.ts';
+import {BPMToTime, createAudioContext, createBiquadFilter, createCompressor, createGain, CreateNoiseOscillator, createOscillator, createReverb, createStereoPanner, createWaveShaper, db2mag, GetMaxAbsValue, NoteToPitch} from './audio/Utilities.ts';
 
 interface ADSR {
   a: number, d: number, s: number, sl: number, r: number
@@ -106,8 +106,12 @@ class AudioMain {
         new TapeDelay(this.ctx, Math.random, BPMToTime(this.bpm, 2 / 8), 0.4);
 
     this.output_gain = createGain(this.ctx, 0.0);
+    const limiter = createCompressor(this.ctx, -6, 3, 20, 0.001, 1.0);
+    const saturator =
+        createWaveShaper(this.ctx, HyperTanDistortionCurve(0, 0), '4x');
+
     createReverb(this.ctx, 4.1, 5000, false).then((send_b) => {
-      this.mixer = new AudioMixer(this.output_gain, this.delay.input, send_b);
+      this.mixer = new AudioMixer(limiter, this.delay.input, send_b);
       this.delay.connect(this.output_gain);
       send_b.connect(this.output_gain);
 
@@ -115,11 +119,9 @@ class AudioMain {
       const noise_filter =
           createBiquadFilter(this.ctx, 'lowpass', 4000, 1.0, 0.0);
       noise.connect(noise_filter)
-          .connect(this.mixer.AddTrack(this.ctx, -45, -40, -40, 0));
+          .connect(this.mixer.AddTrack(this.ctx, -40, -40, -40, 0));
       this.startable_nodes.push(noise);
 
-      // const saturator =
-      //     createWaveShaper(this.ctx, HyperTanDistortionCurve(0, 0), '4x');
 
       // chord
       const chord_osc_1 =
@@ -133,16 +135,18 @@ class AudioMain {
       chord_osc_1.connect(chord_gain);
       chord_osc_2.connect(chord_gain);
       chord_osc_3.connect(chord_gain);
-      this.chord_lfo = new LFO(this.ctx, 0.1, db2mag(-40), db2mag(-20));
+      this.chord_lfo = new LFO(this.ctx, 0.1, db2mag(-35), db2mag(-15));
       this.chord_lfo.connect(chord_gain.gain);
       chord_gain.connect(this.mixer.AddTrack(this.ctx, 0, -12, -24, 0));
 
       // sequence inputs
       for (let i = 0; i < this.num_sequences; ++i) {
-        this.sequence_inputs.push(this.mixer.AddTrack(this.ctx, -6, -6, -6, 0));
+        this.sequence_inputs.push(this.mixer.AddTrack(this.ctx, -3, -6, -6, 0));
       }
 
-      this.output_gain.connect(this.ctx.destination);
+      limiter.connect(saturator)
+          .connect(this.output_gain)
+          .connect(this.ctx.destination);
       this.loaded = true;
     });
   }
@@ -184,7 +188,7 @@ class AudioMain {
     }
     return [ci, ct];
   }
-  public GetMixerLevels(peak = true, alpha = 0.98) {
+  public GetMixerLevels(peak = true, alpha = 0.98): number[] {
     if (this.loaded && this.started) {
       let new_levels = this.mixer.GetMixerLevels(!peak);
       if (this.levels) {
@@ -225,9 +229,9 @@ class AudioMain {
                           () => {return Math.floor(
                               Math.random() * this.states.length)});
         const la = 2;
-        const velocity = [db2mag(-6), 1., db2mag(-30)];
+        const velocity = [db2mag(-6), db2mag(-3), db2mag(-30)];
         const oct = [1, 4, 20];
-        const prob = [0.7, 0.2, 0.1];
+        const prob = [0.7, 0.2, 0.2];
         const step_mod = [4, 2, 8];
         const mod_depth = [40, 200, 200];
         const mod_rate = [1.502, 3.03, 0.05];
