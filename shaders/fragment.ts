@@ -3,8 +3,9 @@ const fragment = /* glsl */ `
 varying vec2 vUv;
 uniform vec2 u_resolution;
 uniform float u_time;
-uniform float u_mixer_levels[5];
+uniform float u_mixer_levels[6];
 uniform vec2 u_mouse_xy;
+uniform float u_grid_width;
 // Constants
 #define PI 3.141592654
  
@@ -138,47 +139,70 @@ vec3 base_color(bool dark) {
     return vec3(0.992,0.957,0.906);
 }
 
-vec3 color_field(vec2 st, float t, float level) {
-  vec3 color = vec3(0.675,0.231,0.145); // red
-  // vec3 color = vec3(0.051,0.141,0.271); // blue
+vec3 color_field(vec2 st, float t, vec2 grid) {
+  vec3 color_1 = vec3(0.675,0.231,0.145); // red
+  vec3 color_2 = vec3(0.675,0.498,0.145); // marigold
+  vec3 color_3 = vec3(0.353,0.29,0.675); // blue
   vec3 base = base_color(true);
   float stripes = (0.95 + 0.05 * stepped_random_2d(st, vec2(1., 0.001)));
-  float noise = rand2d(st) * 0.2;
-  float accent_map = fbn(st + 0.1 * sin(-t / 2.), st + 0.1 * cos(t / 2.), st + 0.1 * sin(t / 2.), 0.4 + 0.2 * abs(sin(t)), 0.5, 0.6);
-  // accent_map *= (0.3 + 0.7 * hannWindow(st.x + perlin1d(0.1 * t) * perlin1d(10. * st.y), 0.8 + perlin1d(0.1 * t), 0.5));
-  accent_map *= stripes;
-  accent_map += noise;
-  color = mix(color, hexToFloatColor(0xFDE9CD), 2. * level * squares(st, t, 0.));
-  color = mix(color, hexToFloatColor(0xFDE9CD), 0.4 * hannWindow(st.x, u_mouse_xy.x, 0.4) * hannWindow(st.y, u_mouse_xy.y, 0.7));
-  vec3 c = mix(base, color, accent_map);
+  float noise = rand2d(st) * 0.1;
+  float texture = clamp(stripes - noise, 0., 1.);
+  vec3 st_move = vec3(perlin1d(t) * sin(-t / 20.), perlin1d(0.1 * t) * cos(t / 15.), 0.1 * sin(t / 2.)); // moves st to animate field
+  float color_1_map = fbn(2.0 * st + st_move.x, st + st_move.y, st + st_move.z , 0.4, 0.5, 0.6);
+  color_1 = mix(base, color_1, color_1_map);
+  float color_2_map = fbn(st - 0.1 * st_move.x, 1.2 * st - st_move.y, 1.2 * st - st_move.z, 0.2 , 0.5, 0.7);
+  color_2 = mix(base, color_2, color_2_map);
+  // add blue color
+  float color_3_map = (1.1 - color_1_map) * stepped_random_2d(st, grid) * stripes;
+  vec3 color = mix(color_1, color_3, smoothstep(0.7, 1.0, color_3_map + 40. * u_mixer_levels[4]));
+  // add marigold
+  color = mix(color, color_2, smoothstep(0.6, 1., color_2_map));
+  // add highlights based on mouse position
+  float mouse_x = u_grid_width * (floor(u_mouse_xy.x / u_grid_width) + 0.5);
+  color = mix(color, hexToFloatColor(0xFDE9CD), u_mixer_levels[5] * 5.0 * hannWindow(st.x, mouse_x, 2.0 * u_grid_width) * hannWindow(st.y, u_mouse_xy.y, 1.5));
+  vec3 c = mix(base, color, texture);
   return c;
 }
 
-float grain(vec2 st, float t, float noise_depth) {
-  float grain_d = 0.1;
-  float circles = 0.0;
-  vec2 grid_pos = st + vec2(0.4 * sin(0.5 + 0.5 * stepped_random(st.y, grain_d)), 0.);
-  grid_pos.x += 0.2 * u_mixer_levels[4] * sin(40. * quantize(st.y + 6.0 * t, grain_d));
+float tilt_window(float x, float st_1, float peak, float st_2) {
+  return smoothstep(st_1, peak, x) * (1. - smoothstep(peak, st_2, x));
+}
 
-  float scale = 0.7 + 0.3 * sin(2. * stepped_random_2d(grid_pos, vec2(grain_d)) * t); // subtle flashing
-  vec2 xy = mod(grid_pos, vec2(grain_d)); // grid
-  vec2 center = vec2(grain_d * stepped_random_2d(2.0 * grid_pos, vec2(grain_d)));
+float grain(vec2 st, float t, float noise_depth, vec2 width) {
+  vec2 grain_d = width; 
+  float circles = 0.0;
+  vec2 grid_pos = st;
+  float scale = 0.7 + 0.3 * sin(2. * stepped_random_2d(grid_pos, grain_d) * t); // subtle flashing
+  vec2 xy = mod(grid_pos, grain_d); // grid
+  vec2 center = vec2(0.5, 0.5) * grain_d; // center of each square
+  // create randomized offset for each square
+  center *= (2. - 2.0 * vec2((1. - stepped_random_2d(st, grain_d)), stepped_random_2d(st, grain_d)));
+  // move centers with mixer 1 data
+  center += grain_d * (0.5 - vec2(perlin1d(t / 11.), perlin1d(-t / 7.))) * u_mixer_levels[1];
+
+  // size scaling with mixer data
+  float mouse_x = u_grid_width * floor(u_mouse_xy.x / u_grid_width);
+  float sound_size = 1.0 + u_mixer_levels[5] * sin(2.0 * 2. * PI * (u_time + stepped_random(st.x, width.x))) * (0.2 + step(mouse_x, vUv.x) - step(mouse_x + u_grid_width, vUv.x)); 
+
   for (float i = 0.; i < 3.; ++i) {
-    center += 0.2 * grain_d * vec2(10. * u_mixer_levels[int(i) + 1] * sin(i * t), 10. * u_mixer_levels[int(i) + 1] * cos(i * t));
-    circles = mix(circles, 1.0, 0.5 * scale * circle(xy, center, 0.4 * grain_d, 0.6));
+    center += 0.1 * (vec2(0.5) - vec2(perlin1d(0.15 * t * stepped_random(st.x, grain_d.x)), perlin1d(-0.23 * t* stepped_random(st.y, grain_d.y))));
+    circles = mix(circles, 1.0, scale * circle(xy, center, sound_size * 0.7 * grain_d.y, 0.7 + 0.2 * sin(0.25 * u_time)));
   }
+
   return circles;
 }
 
 void main()
 {
   float a_r = u_resolution.y / u_resolution.x;
+  float width = u_grid_width / a_r;
   vec2 st = vec2(vUv.x / a_r, vUv.y);
+  vec2 square_width = vec2(width, 0.08 + 0.6 * tilt_window(quantize(st.x, width), 0.1, 0.8, 1.7));
   float f_rate = 10.;
   float quant_time = quantize(u_time, 1. / f_rate);
-  float grains = grain(st, quant_time, 0.1);
-  vec3 colors = color_field(vUv, quant_time, u_mixer_levels[3]);  
-  // gl_FragColor = vec4(color_field(vUv, quant_time, 0.0), 1.0);
+  float grains = grain(st, quant_time, 0.1, square_width);
+  vec3 colors = color_field(vUv, quant_time, square_width * vec2(a_r));  
+  // gl_FragColor = vec4(colors, 1.0);
   gl_FragColor = vec4(mix(base_color(true), colors, grains), 1.0);
 
   // gl_FragColor = vec4(vec3(circle(vUv, u_mouse_xy, 0.1)), 1.0);

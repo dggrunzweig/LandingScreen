@@ -1,5 +1,5 @@
 // @ts-ignore Import module
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import * as THREE from 'three';
 
 import {clamp} from './audio/Utilities.ts';
 import AudioMain from './AudioMain.ts';
@@ -8,8 +8,9 @@ import vertex from './shaders/vertex.ts'
 
 const audio = new AudioMain();
 const uniforms = {
-  u_mixer_levels: {value: [0., 0., 0., 0., 0.]},
+  u_mixer_levels: {value: [0., 0., 0., 0., 0., 0.]},
   u_mouse_xy: {value: new THREE.Vector2(0, 0)},
+  u_grid_width: {value: 1 / audio.GetMouseNotes().length},
   u_time: {value: 0.0},
   u_resolution:
       {value: new THREE.Vector2(window.innerWidth, window.innerHeight)}
@@ -104,7 +105,7 @@ renderer.domElement.onmousemove = (e: MouseEvent) => {
 
 const start = () => {
   audio.start();
-  if (!audio.playing) fading_out = true;
+  fading_out = !audio.playing
   start_time = clock.getElapsedTime();
 };
 

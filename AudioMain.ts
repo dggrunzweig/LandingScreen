@@ -120,6 +120,8 @@ class AudioMain {
         .connect(this.mixer.AddTrack(this.ctx, -40, -40, -40, 0));
 
     // chord
+    const wf =
+        this.ctx.createPeriodicWave([1, db2mag(-12), db2mag(-24)], [0, 0, 0]);
     const chord_osc_1 =
         createOscillator(this.ctx, 'sine', NoteToPitch('C', 3), 0);
     const chord_osc_2 =
@@ -127,6 +129,7 @@ class AudioMain {
     const chord_osc_3 =
         createOscillator(this.ctx, 'sine', NoteToPitch('D', 4), 0);
     this.chord_osc.push(chord_osc_1, chord_osc_2, chord_osc_3);
+    this.chord_osc.forEach((osc: OscillatorNode) => {osc.setPeriodicWave(wf)})
     const chord_gain = createGain(this.ctx, 0);
     chord_osc_1.connect(chord_gain);
     chord_osc_2.connect(chord_gain);
@@ -205,13 +208,15 @@ class AudioMain {
     }
     return new Array(this.num_sequences + 2).fill(0);
   }
-  public UpdateMouse(x: number, y: number) {
-    const notes = [
+  public GetMouseNotes(): NoteState[] {
+    return [
       {n: 'A', o: 1, d: 2}, {n: 'D', o: 2, d: 2}, {n: 'F#', o: 2, d: 2},
       {n: 'G', o: 2, d: 2}, {n: 'B', o: 2, d: 2}, {n: 'D', o: 3, d: 2},
       {n: 'F#', o: 3, d: 2}, {n: 'G', o: 3, d: 2}
-
     ];
+  }
+  public UpdateMouse(x: number, y: number) {
+    const notes = this.GetMouseNotes();
     const grid_width = 1 / notes.length;
     const m_i = this.sequence_inputs[this.num_sequences];
     const i = clamp(Math.floor(x / grid_width), 0, notes.length - 1);
