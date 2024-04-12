@@ -18,7 +18,7 @@ const PARAMS = {
 };
 
 const hexToGLSL = (hex_color: string) => {
-  const value = <number>('0x' + hex_color.slice(1));
+  const value = parseInt('0x' + hex_color.slice(1));
   return new THREE.Vector3(
       ((value / 256 / 256) % 256) / 256, ((value / 256) % 256) / 256,
       (value % 256) / 256);
@@ -41,37 +41,38 @@ const uniforms = {
   u_tilt_height: {value: PARAMS.tilt_height},
 };
 
-if (import.meta.env.DEV) {
-  const pane = new Pane();
+// if (import.meta.env.DEV) {
+//   const pane = new Pane();
 
-  pane.addBinding(PARAMS, 'color_base').on('change', (ev) => {
-    uniforms.u_base_color.value = hexToGLSL(ev.value);
-  });
-  pane.addBinding(PARAMS, 'color_1').on('change', (ev) => {
-    uniforms.u_color_1.value = hexToGLSL(ev.value);
-  });
-  pane.addBinding(PARAMS, 'color_2').on('change', (ev) => {
-    uniforms.u_color_2.value = hexToGLSL(ev.value);
-  });
-  pane.addBinding(PARAMS, 'color_accent').on('change', (ev) => {
-    uniforms.u_color_accent.value = hexToGLSL(ev.value);
-  });
-  pane.addBinding(PARAMS, 'tilt_1', {min: -2, max: 2}).on('change', () => {
-    uniforms.u_tilt_window.value =
-        new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
-  });
-  pane.addBinding(PARAMS, 'tilt_2', {min: -2, max: 2}).on('change', () => {
-    uniforms.u_tilt_window.value =
-        new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
-  });
-  pane.addBinding(PARAMS, 'tilt_3', {min: -2, max: 2}).on('change', () => {
-    uniforms.u_tilt_window.value =
-        new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
-  });
-  pane.addBinding(PARAMS, 'tilt_height', {min: 0, max: 4}).on('change', () => {
-    uniforms.u_tilt_height.value = PARAMS.tilt_height;
-  });
-}
+//   pane.addBinding(PARAMS, 'color_base').on('change', () => {
+//     uniforms.u_base_color.value = hexToGLSL(PARAMS.color_base);
+//   });
+//   pane.addBinding(PARAMS, 'color_1').on('change', () => {
+//     uniforms.u_color_1.value = hexToGLSL(PARAMS.color_1);
+//   });
+//   pane.addBinding(PARAMS, 'color_2').on('change', () => {
+//     uniforms.u_color_2.value = hexToGLSL(PARAMS.color_2);
+//   });
+//   pane.addBinding(PARAMS, 'color_accent').on('change', () => {
+//     uniforms.u_color_accent.value = hexToGLSL(PARAMS.color_accent);
+//   });
+//   pane.addBinding(PARAMS, 'tilt_1', {min: -2, max: 2}).on('change', () => {
+//     uniforms.u_tilt_window.value =
+//         new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
+//   });
+//   pane.addBinding(PARAMS, 'tilt_2', {min: -2, max: 2}).on('change', () => {
+//     uniforms.u_tilt_window.value =
+//         new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
+//   });
+//   pane.addBinding(PARAMS, 'tilt_3', {min: -2, max: 2}).on('change', () => {
+//     uniforms.u_tilt_window.value =
+//         new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
+//   });
+//   pane.addBinding(PARAMS, 'tilt_height', {min: 0, max: 4}).on('change', ()
+//   => {
+//     uniforms.u_tilt_height.value = PARAMS.tilt_height;
+//   });
+// }
 
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
@@ -155,6 +156,19 @@ renderer.domElement.onmousemove = (e: MouseEvent) => {
       Math.min(Math.max(0, e.offsetY / renderer.domElement.clientHeight), 1.);
   uniforms.u_mouse_xy.value = new THREE.Vector2(x, y);
   audio.UpdateMouse(x, y);
+};
+
+renderer.domElement.ontouchmove = (e: TouchEvent) => {
+  const touches = e.changedTouches;
+  for (let i = 0; i < touches.length; ++i) {
+    const t = touches[i];
+    const x =
+        Math.min(Math.max(0, t.clientX / renderer.domElement.clientWidth), 1.);
+    const y = 1 -
+        Math.min(Math.max(0, t.clientY / renderer.domElement.clientHeight), 1.);
+    uniforms.u_mouse_xy.value = new THREE.Vector2(x, y);
+    audio.UpdateMouse(x, y);
+  }
 };
 
 const start = () => {
