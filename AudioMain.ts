@@ -77,7 +77,6 @@ class AudioMain {
   constructor() {
     this.ctx = createAudioContext();
     this.time_per_step = BPMToTime(this.bpm, 1 / 16);
-    console.log(this.time_per_step);
     this.states = [
       {n: 'C', o: 1, d: 8},
       {n: 'C', o: 2, d: 2},

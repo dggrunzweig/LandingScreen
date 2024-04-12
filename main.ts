@@ -1,10 +1,28 @@
-// @ts-ignore Import module
 import * as THREE from 'three';
+import {Pane} from 'tweakpane';
 
 import {clamp} from './audio/Utilities.ts';
 import AudioMain from './AudioMain.ts';
 import fragment from './shaders/fragment.ts'
 import vertex from './shaders/vertex.ts'
+
+const PARAMS = {
+  color_base: '#040b14',
+  color_1: '#792515',
+  color_2: '#b57335',
+  color_accent: '#5a49ac',
+  tilt_1: 0.09,
+  tilt_2: 1.26,
+  tilt_3: 1.65,
+  tilt_height: 0.35,
+};
+
+const hexToGLSL = (hex_color: string) => {
+  const value = <number>('0x' + hex_color.slice(1));
+  return new THREE.Vector3(
+      ((value / 256 / 256) % 256) / 256, ((value / 256) % 256) / 256,
+      (value % 256) / 256);
+};
 
 const audio = new AudioMain();
 const uniforms = {
@@ -13,8 +31,47 @@ const uniforms = {
   u_grid_width: {value: 1 / audio.GetMouseNotes().length},
   u_time: {value: 0.0},
   u_resolution:
-      {value: new THREE.Vector2(window.innerWidth, window.innerHeight)}
+      {value: new THREE.Vector2(window.innerWidth, window.innerHeight)},
+  u_base_color: {value: hexToGLSL(PARAMS.color_base)},
+  u_color_1: {value: hexToGLSL(PARAMS.color_1)},
+  u_color_2: {value: hexToGLSL(PARAMS.color_2)},
+  u_color_accent: {value: hexToGLSL(PARAMS.color_accent)},
+  u_tilt_window:
+      {value: new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3)},
+  u_tilt_height: {value: PARAMS.tilt_height},
 };
+
+if (import.meta.env.DEV) {
+  const pane = new Pane();
+
+  pane.addBinding(PARAMS, 'color_base').on('change', (ev) => {
+    uniforms.u_base_color.value = hexToGLSL(ev.value);
+  });
+  pane.addBinding(PARAMS, 'color_1').on('change', (ev) => {
+    uniforms.u_color_1.value = hexToGLSL(ev.value);
+  });
+  pane.addBinding(PARAMS, 'color_2').on('change', (ev) => {
+    uniforms.u_color_2.value = hexToGLSL(ev.value);
+  });
+  pane.addBinding(PARAMS, 'color_accent').on('change', (ev) => {
+    uniforms.u_color_accent.value = hexToGLSL(ev.value);
+  });
+  pane.addBinding(PARAMS, 'tilt_1', {min: -2, max: 2}).on('change', () => {
+    uniforms.u_tilt_window.value =
+        new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
+  });
+  pane.addBinding(PARAMS, 'tilt_2', {min: -2, max: 2}).on('change', () => {
+    uniforms.u_tilt_window.value =
+        new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
+  });
+  pane.addBinding(PARAMS, 'tilt_3', {min: -2, max: 2}).on('change', () => {
+    uniforms.u_tilt_window.value =
+        new THREE.Vector3(PARAMS.tilt_1, PARAMS.tilt_2, PARAMS.tilt_3);
+  });
+  pane.addBinding(PARAMS, 'tilt_height', {min: 0, max: 4}).on('change', () => {
+    uniforms.u_tilt_height.value = PARAMS.tilt_height;
+  });
+}
 
 const clock = new THREE.Clock();
 const scene = new THREE.Scene();
@@ -43,9 +100,6 @@ const init =
 
       // start clock
       clock.start();
-
-      console.log('Loaded');
-      // Start the animation
     }
 
 // Animation function

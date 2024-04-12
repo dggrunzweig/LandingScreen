@@ -14,17 +14,3 @@ body {
     transform: translate(-50%, -50%);
     mix-blend-mode: normal;
 }
-
-div {
-    position: absolute;
-    z-index: 1;
-    margin: auto;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: auto;
-    padding: 10px;
-    background-color: green;
-    text-align: center;
-
-}
