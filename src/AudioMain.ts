@@ -2,7 +2,7 @@ import AudioMixer from './audio/AudioMixer.ts'
 import LFO from './audio/LFO.ts'
 import {NoteState, RandomMarkovCreate, RandomMarkovGenerateNote} from './audio/RandomMarkov.ts';
 import {HyperTanDistortionCurve} from './audio/SaturationDesigner.ts';
-import TapeDelay from './audio/TapeDelay.ts'
+import TapeDelay from './audio/TapeDelay.ts';
 import {BPMToTime, clamp, createAudioContext, createBiquadFilter, createCompressor, createGain, CreateNoiseOscillator, createOscillator, createReverb, createStereoPanner, createWaveShaper, db2mag, GetMaxAbsValue, NoteToPitch} from './audio/Utilities.ts';
 
 interface ADSR {
@@ -241,7 +241,6 @@ class AudioMain {
   public start() {
     if (this.ctx.state == 'suspended') {
       this.ctx.resume();
-      console.log('context resumed');
     }
     if (this.loaded) {
       if (!this.started) {
@@ -252,14 +251,12 @@ class AudioMain {
         this.started = true;
       }
       if (this.playing) {
-        console.log('Pause');
         const fade_out = 2.0;
         this.output_gain.gain.setTargetAtTime(0, 0, fade_out / 2.5);
         setTimeout(() => {
           this.seq_timers.forEach((timer) => {clearTimeout(timer)});
         }, fade_out * 1000);
       } else {
-        console.log('Play');
         this.ct = new Array(this.num_sequences).fill(this.ctx.currentTime);
         this.ci = new Array(this.num_sequences)
                       .fill(0)

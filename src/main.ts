@@ -1,15 +1,27 @@
-import * as THREE from 'three';
-import {Pane} from 'tweakpane';
+// import {Pane} from 'tweakpane';
+
+// @ts-ignore
+import * as THREE from '../three.module.min.js';
 
 import {clamp} from './audio/Utilities.ts';
 import AudioMain from './AudioMain.ts';
 import fragment from './shaders/fragment.ts'
 import vertex from './shaders/vertex.ts'
 
+
+const clock = new THREE.Clock();
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+const renderer = new THREE.WebGLRenderer();
+let start_svg = document.getElementById('start-svg');
+let info_svg = document.getElementById('info-svg');
+let start_time = 0;
+let fading_out = false;
+
 const PARAMS = {
-  color_base: '#040b14',
-  color_1: '#792515',
-  color_2: '#b57335',
+  color_base: '#00060e',
+  color_1: '#6c2012',
+  color_2: '#c84330',
   color_accent: '#5a49ac',
   tilt_1: 0.09,
   tilt_2: 1.26,
@@ -28,7 +40,7 @@ const audio = new AudioMain();
 const uniforms = {
   u_mixer_levels: {value: [0., 0., 0., 0., 0., 0.]},
   u_mouse_xy: {value: new THREE.Vector2(0, 0)},
-  u_grid_width: {value: 1 / audio.GetMouseNotes().length},
+  u_grid_width: {value: 1 / (audio.GetMouseNotes().length)},
   u_time: {value: 0.0},
   u_resolution:
       {value: new THREE.Vector2(window.innerWidth, window.innerHeight)},
@@ -41,7 +53,6 @@ const uniforms = {
   u_tilt_height: {value: PARAMS.tilt_height},
 };
 
-// if (import.meta.env.DEV) {
 //   const pane = new Pane();
 
 //   pane.addBinding(PARAMS, 'color_base').on('change', () => {
@@ -72,15 +83,7 @@ const uniforms = {
 //   => {
 //     uniforms.u_tilt_height.value = PARAMS.tilt_height;
 //   });
-// }
 
-const clock = new THREE.Clock();
-const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
-const renderer = new THREE.WebGLRenderer();
-let start_svg = document.getElementById('start-svg');
-let start_time = 0;
-let fading_out = false;
 const init =
     () => {
       // Create a plane geometry
@@ -135,17 +138,25 @@ window.addEventListener('resize', () => {
       new THREE.Vector2(window.innerWidth, window.innerHeight);
 });
 
+window.addEventListener('keypress', (ev: KeyboardEvent) => {
+  if (ev.key == 'z') {
+    full_screen();
+  }
+})
+
 const svg_color = (opacity: number) => {
-  if (start_svg) {
+  if (start_svg && info_svg) {
     if (opacity < .01) {
       start_svg.style.display = 'none';
+      info_svg.style.display = 'none';
       return;
     } else {
       start_svg.style.display = 'initial';
+      info_svg.style.display = 'initial';
     }
 
-    const c = `rgba(255, 255, 255, ${opacity})`;
-    start_svg.style.fill = c;
+    start_svg.style.opacity = '' + opacity;
+    info_svg.style.opacity = '' + opacity;
   }
 };
 
@@ -187,6 +198,10 @@ if (start_svg) {
   };
 }
 
+const full_screen = () => {
+  const el = renderer.domElement;
+  if (el.requestFullscreen) el.requestFullscreen();
+};
 
 init();
 animate();

@@ -15,10 +15,6 @@ uniform float u_tilt_height;
 
 // Constants
 #define PI 3.141592654
- 
-float map(float value, float min1, float max1, float min2, float max2) {
-  return (value - min1) / (max1 - min1) * (max2 - min2) + min2;
-}
 
 float rand(float x){
 	return fract(sin(dot(x, 12.9898)) * 43758.5453);
@@ -59,45 +55,12 @@ float perlin2d(vec2 p) {
 
 }
 
-
-vec2 rotate(vec2 v, float a) {
-	float s = sin(a);
-	float c = cos(a);
-	mat2 m = mat2(c, s, -s, c);
-	return m * v;
-}
-
-float circle(vec2 st, vec2 center, float radius, float smoothing) {
-  float dist = sqrt(pow(st.x - center.x, 2.0) + pow(st.y - center.y, 2.0));
-  return 1.0 - smoothstep(radius*smoothing, radius, dist);
-}
-
-
-float ring(vec2 st, vec2 center, float radius, float width) {
-  return circle(st, center, radius, 0.9) - circle(st, center, radius - width, 0.9);
-}
-
 float radial_dist(vec2 st, vec2 center) {
   return sqrt(pow(st.x - center.x, 2.0) + pow(st.y - center.y, 2.0));
 }
 
-float radial_angle(vec2 st, vec2 center) {
-  float x = (st.x - center.x);
-  float y = (st.y - center.y);
-  // if (abs(x) < 0.00001) {
-  //   if (y < 0.) {
-  //     return 1.5 * PI;
-  //   }
-  //   else {
-  //     return 0.5 * PI;
-  //   }
-  // } else 
-    return sign(x) * atan(abs(y) / abs(x));
-}
-
-float rect(vec2 st, vec2 lr_corner, vec2 dim) {
-  vec2 step_vec = (1.0 - step(dim + lr_corner, st)) * step(lr_corner, st);
-  return step_vec.x * step_vec.y;
+float circle(vec2 st, vec2 center, float radius, float smoothing) {
+  return 1.0 - smoothstep(radius*smoothing, radius, radial_dist(st, center));
 }
 
 float quantize(float x, float step_size) {
@@ -149,7 +112,7 @@ vec3 color_field(vec2 st, float t, vec2 grid) {
   float color_2_map = fbn(q_st - 0.1 * st_move.x, 1.2 * q_st - st_move.y, 1.2 * q_st - st_move.z, 0.2 , 0.5, 0.7);
   color_2 = mix(base, color_2, color_2_map);
   // add blue color
-  float color_3_map = (1.5 - color_1_map) * stepped_random_2d(st, grid) * stripes;
+  float color_3_map = (1.2 * color_1_map) * stepped_random_2d(st, grid) * stripes;
   vec3 color = mix(color_1, color_3, smoothstep(0.7, 1.0, color_3_map + 40. * u_mixer_levels[4]));
   // add marigold
   color = mix(color, color_2, smoothstep(0.6, 1., color_2_map));
@@ -157,6 +120,7 @@ vec3 color_field(vec2 st, float t, vec2 grid) {
   float mouse_x = u_grid_width * (floor(u_mouse_xy.x / u_grid_width) + 0.5);
   color = mix(color, color_mouse, u_mixer_levels[5] * 5.0 * hannWindow(st.x, mouse_x, 2.0 * u_grid_width) * hannWindow(st.y, u_mouse_xy.y, 1.5));
   vec3 c = mix(base, color, texture);
+  c = mix(base, c, 0.1 + 0.9 * hannWindow(st.y, 0.5, 0.9));
   return c;
 }
 
@@ -200,8 +164,6 @@ void main()
   vec3 colors = color_field(vUv, quant_time, square_width * vec2(a_r));  
   // gl_FragColor = vec4(colors, 1.0);
   gl_FragColor = vec4(mix(u_base_color, colors, grains), 1.0);
-
-  // gl_FragColor = vec4(vec3(circle(vUv, u_mouse_xy, 0.1)), 1.0);
 }
 `;
 
