@@ -12,6 +12,7 @@ uniform vec3 u_color_2;
 uniform vec3 u_color_accent;
 uniform vec3 u_tilt_window;
 uniform float u_tilt_height;
+uniform float u_noise_level;
 
 // Constants
 #define PI 3.141592654
@@ -100,10 +101,10 @@ vec3 color_field(vec2 st, float t, vec2 grid) {
   vec3 color_1 = u_color_1; // red
   vec3 color_2 = u_color_2; // marigold
   vec3 color_3 = u_color_accent; // blue
-  vec3 color_mouse = vec3(0.992,0.914,0.804);
+  vec3 color_mouse = vec3(0.875,0.949,0.878);//vec3(0.992,0.914,0.804);
   vec3 base = u_base_color;
   float stripes = (0.95 + 0.05 * stepped_random_2d(st, vec2(1., 0.001)));
-  float noise = rand2d(st) * 0.1;
+  float noise = rand2d(st + 2. * rand(t) - 1.) * u_noise_level;
   float texture = clamp(stripes - noise, 0., 1.);
   vec3 st_move = vec3(perlin1d(t) * sin(-t / 20.) + t / 100., perlin1d(0.1 * t) * cos(t / 15.), 0.1 * sin(t / 2.)); // moves st to animate field
   float color_1_map = fbn(2.0 * st + st_move.x, st + st_move.y, st + st_move.z , 0.4, 0.5, 0.6);
