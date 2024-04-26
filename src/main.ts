@@ -13,7 +13,6 @@ const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
 const renderer = new THREE.WebGLRenderer();
 let start_svg = document.getElementById('start-svg');
-let info_svg = document.getElementById('info-svg');
 let start_time = 0;
 let fading_out = false;
 
@@ -209,6 +208,9 @@ const animate = () => {
     }
     svg_color(fade);
   }
+  if (!audio.playing) {
+    svg_color(1.);
+  }
 };
 
 // Handle window resize
@@ -229,18 +231,16 @@ window.addEventListener('keypress', (ev: KeyboardEvent) => {
 })
 
 const svg_color = (opacity: number) => {
-  if (start_svg && info_svg) {
+  if (start_svg) {
     if (opacity < .01) {
       start_svg.style.display = 'none';
-      info_svg.style.display = 'none';
       return;
     } else {
       start_svg.style.display = 'initial';
-      info_svg.style.display = 'initial';
     }
-
-    start_svg.style.opacity = '' + opacity;
-    info_svg.style.opacity = '' + opacity;
+    const flash = 0.4 +
+        0.6 * (0.5 * (1 + Math.sin(1 * Math.PI * clock.getElapsedTime())));
+    start_svg.style.opacity = '' + opacity * flash;
   }
 };
 
